@@ -81,13 +81,13 @@ struct AboutView: View {
                 }
 
                 // Interactive Links
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     // Developer LinkedIn profile button (NO GitHub link, per user specification)
                     Button(action: openLinkedIn) {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 4) {
                             Image(systemName: "link")
                                 .font(.system(size: 10, weight: .bold))
-                            Text("LinkedIn Profile")
+                            Text("LinkedIn")
                                 .font(.system(size: 11, weight: .medium))
                         }
                     }
@@ -96,10 +96,22 @@ struct AboutView: View {
 
                     // Open User Guide button
                     Button(action: openUserGuide) {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 4) {
                             Image(systemName: "book.pages")
                                 .font(.system(size: 10, weight: .bold))
                             Text("User Guide")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    // Check for Updates button
+                    Button(action: checkForUpdates) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("Updates")
                                 .font(.system(size: 11, weight: .medium))
                         }
                     }
@@ -146,5 +158,11 @@ struct AboutView: View {
 
     private func openUserGuide() {
         NotificationCenter.default.post(name: NSNotification.Name("OpenUserGuide"), object: nil)
+    }
+
+    private func checkForUpdates() {
+        if let url = URL(string: "https://github.com/sajanaKaru/LingoBar/releases/latest") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

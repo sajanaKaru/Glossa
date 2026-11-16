@@ -4,6 +4,7 @@ LingoBar
 LingoBar.app
 *.dmg
 *.zip
+*.sha256
 .build_staging
 .dmg_staging
 .DS_Store
