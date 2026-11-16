@@ -22,6 +22,7 @@ final class GlobalHotKeyManager {
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
     var onTrigger: (() -> Void)?
+    var onRewriteTrigger: (() -> Void)?
     var hasRegistrationConflict: Bool = false
 
     func setup() -> Bool {
@@ -43,7 +44,11 @@ final class GlobalHotKeyManager {
             )
             if status == noErr {
                 DispatchQueue.main.async {
-                    GlobalHotKeyManager.shared.onTrigger?()
+                    if hotKeyID.id == 3 {
+                        GlobalHotKeyManager.shared.onRewriteTrigger?()
+                    } else {
+                        GlobalHotKeyManager.shared.onTrigger?()
+                    }
                 }
             }
             return noErr
@@ -77,6 +82,18 @@ final class GlobalHotKeyManager {
             NSLog("[LingoBar] Successfully registered Carbon Global HotKey: Option+Shift+L")
         } else {
             NSLog("[LingoBar] Failed to register Carbon Global HotKey Option+Shift+L with status: %d", lStatus)
+            hasRegistrationConflict = true
+        }
+
+        // 3. Option + Shift + R (kVK_ANSI_R = 15, optionKey | shiftKey)
+        let rID = EventHotKeyID(signature: OSType(0x4C4E4742), id: 3) // 'LNGB', 3
+        var rRef: EventHotKeyRef?
+        let rStatus = RegisterEventHotKey(UInt32(kVK_ANSI_R), UInt32(optionKey | shiftKey), rID, GetApplicationEventTarget(), 0, &rRef)
+        if rStatus == noErr, let r = rRef {
+            hotKeyRefs.append(r)
+            NSLog("[LingoBar] Successfully registered Carbon Global HotKey: Option+Shift+R")
+        } else {
+            NSLog("[LingoBar] Failed to register Carbon Global HotKey Option+Shift+R with status: %d", rStatus)
             hasRegistrationConflict = true
         }
 
@@ -134,12 +151,19 @@ final class InlinePopoverPanel: NSPanel {
     }
 }
 
+// MARK: - Action Trigger Modes
+enum ActionTriggerMode {
+    case translate
+    case rewrite
+}
+
 // MARK: - App Delegate & Coordinate-Anchored Inline Popover Lifecycle
 class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: InlinePopoverPanel!
     var statusItem: NSStatusItem?
     var viewModel = PopoverViewModel()
     var settingsWindow: NSWindow?
+    var guideWindow: NSWindow?
     
     private var globalKeyDownMonitor: Any?
     private var localKeyDownMonitor: Any?
@@ -188,7 +212,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("OpenSettings"),
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openUserGuide),
+            name: NSNotification.Name("OpenUserGuide"),
+            object: nil
+        )
         handleAppDidBecomeActive()
+
+        // Check startup guide suppression preference
+        let suppressGuide = UserDefaults.standard.bool(forKey: "suppressGuideOnStartup")
+        if !suppressGuide {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.openUserGuide()
+            }
+        }
     }
 
     @objc func openSettings() {
@@ -219,6 +257,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
+    @objc func openUserGuide() {
+        if guideWindow == nil {
+            let guideView = UserGuideView(isPresented: Binding(
+                get: { [weak self] in self?.guideWindow?.isVisible ?? false },
+                set: { [weak self] isPres in
+                    if !isPres {
+                        self?.guideWindow?.orderOut(nil)
+                    }
+                }
+            ))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 540, height: 530),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "LingoBar - User Guide / භාවිත උපදෙස්"
+            window.center()
+            window.contentView = NSHostingView(rootView: guideView)
+            window.isReleasedWhenClosed = false
+            self.guideWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        guideWindow?.makeKeyAndOrderFront(nil)
+    }
+
     private func updateMenuBarMenu() {
         guard let button = statusItem?.button else { return }
 
@@ -226,6 +290,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let translateItem = NSMenuItem(title: "Translate Selection", action: #selector(triggerFromMenu), keyEquivalent: "")
+        let rewriteItem = NSMenuItem(title: "✨ Rewrite Selection", action: #selector(triggerRewriteFromMenu), keyEquivalent: "")
 
         if !viewModel.hotKeyConflictMessage.isEmpty {
             let conflictIcon = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: "LingoBar - Shortcut Conflict: Click to Translate")
@@ -240,6 +305,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             translateItem.keyEquivalent = ""
             translateItem.keyEquivalentModifierMask = []
+            rewriteItem.keyEquivalent = ""
+            rewriteItem.keyEquivalentModifierMask = []
         } else {
             let normalIcon = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "LingoBar")
             normalIcon?.isTemplate = true
@@ -248,10 +315,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             translateItem.keyEquivalent = " "
             translateItem.keyEquivalentModifierMask = [.option]
+            rewriteItem.keyEquivalent = "r"
+            rewriteItem.keyEquivalentModifierMask = [.option, .shift]
         }
 
         menu.addItem(translateItem)
+        menu.addItem(rewriteItem)
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "📖 User Guide (භාවිත උපදෙස්)...", action: #selector(openUserGuide), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit LingoBar", action: #selector(quitApp), keyEquivalent: "q"))
@@ -273,7 +344,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func triggerFromMenu() {
-        triggerInstantAction()
+        triggerInstantAction(mode: .translate)
+    }
+
+    @objc func triggerRewriteFromMenu() {
+        triggerInstantAction(mode: .rewrite)
     }
 
     @objc func quitApp() {
@@ -281,9 +356,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupHotKeysAndMonitors() {
-        // 1. Native Carbon Hotkey Manager (Intercepts Option+Space and Option+Shift+L globally)
+        // 1. Native Carbon Hotkey Manager (Intercepts Option+Space, Option+Shift+L, Option+Shift+R globally)
         GlobalHotKeyManager.shared.onTrigger = { [weak self] in
-            self?.triggerInstantAction()
+            self?.triggerInstantAction(mode: .translate)
+        }
+        GlobalHotKeyManager.shared.onRewriteTrigger = { [weak self] in
+            self?.triggerInstantAction(mode: .rewrite)
         }
         let hotKeySuccess = GlobalHotKeyManager.shared.setup()
         if !hotKeySuccess {
@@ -298,7 +376,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if (flags == [.option, .shift] && event.keyCode == 37) ||
                (flags == [.option] && event.keyCode == 49) {
                 DispatchQueue.main.async {
-                    self?.triggerInstantAction()
+                    self?.triggerInstantAction(mode: .translate)
+                }
+            } else if (flags == [.option, .shift] && event.keyCode == 15) { // Option + Shift + R
+                DispatchQueue.main.async {
+                    self?.triggerInstantAction(mode: .rewrite)
                 }
             } else if event.keyCode == 53 && (self?.panel.isVisible == true) { // Esc key
                 DispatchQueue.main.async {
@@ -319,6 +401,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags == [.option, .shift] && event.keyCode == 15 { // Option + Shift + R
+                self.triggerInstantAction(mode: .rewrite)
+                return nil
+            }
             if flags.contains(.option) && (event.keyCode == 36 || event.keyCode == 76) { // Option + Return
                 self.viewModel.runProfessionalPolishAndCopy()
                 return nil
@@ -458,7 +544,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.resetToEmptyState()
     }
 
-    func triggerInstantAction() {
+    func triggerInstantAction(mode: ActionTriggerMode = .translate) {
         if panel.isVisible {
             dismissPopover()
             return
@@ -477,16 +563,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         viewModel.resetToEmptyState()
         viewModel.isAccessibilityTrusted = isTrusted
+        viewModel.activeTriggerMode = mode
 
         if let text = captureResult.text, !text.isEmpty {
-            // Selected text found: automatic streaming translation
+            // Selected text found
             viewModel.isManualInputMode = false
             panel.allowKeyForInput = false
             viewModel.inputText = text
 
             positionPanel(anchoredTo: captureResult.bounds, desiredHeight: 140)
             panel.orderFrontRegardless()
-            viewModel.runTranslate()
+
+            if mode == .rewrite {
+                viewModel.runProfessionalPolishAndCopy()
+            } else {
+                viewModel.runTranslate()
+            }
         } else {
             // No selection found: open inline pill with manual input field at cursor
             viewModel.isManualInputMode = true
@@ -735,6 +827,7 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
     @Published var polishedAutoCopiedToast: Bool = false
     @Published var polishedCopied: Bool = false
     @Published var polishErrorMessage: String = ""
+    @Published var activeTriggerMode: ActionTriggerMode = .translate
 
     // Backward compatibility aliases
     var isTranslating: Bool {
@@ -886,6 +979,7 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
         polishedAutoCopiedToast = false
         polishedCopied = false
         polishErrorMessage = ""
+        activeTriggerMode = .translate
     }
 
     func runTranslate() {
@@ -1624,6 +1718,19 @@ struct InlinePopoverView: View {
                 }
 
                 Button(action: {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenUserGuide"), object: nil)
+                }) {
+                    Image(systemName: "book.pages")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .padding(3)
+                        .background(Color.secondary.opacity(0.12))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("User Guide / භාවිත උපදෙස්")
+
+                Button(action: {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenSettings"), object: nil)
                 }) {
                     Image(systemName: "gearshape")
@@ -1717,9 +1824,12 @@ struct InlinePopoverView: View {
             }
 
             // Manual Input Mode (shown when no text was selected)
-            if vm.isManualInputMode && vm.outputText.isEmpty && !vm.isLoading {
+            if vm.isManualInputMode && vm.outputText.isEmpty && !vm.isLoading && vm.polishedOutputText.isEmpty && !vm.isPolishing {
                 HStack(spacing: 6) {
-                    TextField("Type English text to translate...", text: $vm.inputText)
+                    TextField(
+                        vm.activeTriggerMode == .rewrite ? "Type English text to polish & rewrite..." : "Type English text to translate...",
+                        text: $vm.inputText
+                    )
                         .textFieldStyle(.plain)
                         .font(.system(size: 12.5))
                         .padding(6)
@@ -1727,15 +1837,23 @@ struct InlinePopoverView: View {
                         .cornerRadius(6)
                         .focused($isFieldFocused)
                         .onSubmit {
-                            vm.runTranslate()
+                            if vm.activeTriggerMode == .rewrite {
+                                vm.runProfessionalPolishAndCopy()
+                            } else {
+                                vm.runTranslate()
+                            }
                         }
 
                     Button(action: {
-                        vm.runTranslate()
+                        if vm.activeTriggerMode == .rewrite {
+                            vm.runProfessionalPolishAndCopy()
+                        } else {
+                            vm.runTranslate()
+                        }
                     }) {
-                        Image(systemName: "arrow.right.circle.fill")
+                        Image(systemName: vm.activeTriggerMode == .rewrite ? "sparkles" : "arrow.right.circle.fill")
                             .font(.system(size: 16))
-                            .foregroundColor(.blue)
+                            .foregroundColor(vm.activeTriggerMode == .rewrite ? .purple : .blue)
                     }
                     .buttonStyle(.plain)
                     .disabled(vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1962,7 +2080,9 @@ struct InlinePopoverView: View {
 
             // Subdued Hint
             HStack {
-                Text(vm.isManualInputMode && vm.outputText.isEmpty ? "Press ↵ to translate • ⌥↵ to polish • Esc to dismiss" : "⌥↵ to polish • Click text to copy • Esc to dismiss")
+                Text(vm.isManualInputMode && vm.outputText.isEmpty && vm.polishedOutputText.isEmpty
+                    ? (vm.activeTriggerMode == .rewrite ? "Press ↵ to polish • Esc to dismiss" : "Press ↵ to translate • ⌥↵ to polish • Esc to dismiss")
+                    : "⌥↵ to polish • Click text to copy • Esc to dismiss")
                     .font(.system(size: 9.5))
                     .foregroundColor(.secondary.opacity(0.6))
                 Spacer()
