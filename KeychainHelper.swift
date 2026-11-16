@@ -47,12 +47,14 @@ public struct ConflictCandidate: Identifiable, Equatable {
 public final class KeychainHelper {
     public static let shared = KeychainHelper()
 
-    public static let defaultService = "com.lingobar.macos.apikey"
+    public static let defaultService = "com.glossa.macos.apikey"
+    public static let legacyService = "com.lingobar.macos.apikey"
     public static let defaultAccount = "GROQ_API_KEY"
     public static let fallbackAccount = "GROQ_API_KEY_FALLBACK"
-    public static let fallbackAccountPrefix = "com.lingobar.macos.fallback."
+    public static let fallbackAccountPrefix = "com.glossa.macos.fallback."
     public static let maxFallbackSlots = 10
-    public static let pendingRedundantCleanupKey = "com.lingobar.macos.hasPendingRedundantCleanup"
+    public static let pendingRedundantCleanupKey = "com.glossa.macos.hasPendingRedundantCleanup"
+    public static let legacyPendingRedundantCleanupKey = "com.lingobar.macos.hasPendingRedundantCleanup"
 
     public static func fallbackAccountName(index: Int) -> String {
         if index == 0 {
@@ -76,10 +78,11 @@ public final class KeychainHelper {
     }
 
     // Migration flags
-    private static let legacyMigrationFlagKey = "com.lingobar.macos.hasMigratedLegacyKey"
-    private static let migrationV2FlagKey = "com.lingobar.macos.hasMigratedVaultV2"
+    private static let legacyMigrationFlagKey = "com.glossa.macos.hasMigratedLegacyKey"
+    private static let migrationV2FlagKey = "com.glossa.macos.hasMigratedVaultV2"
     // Explicit deletion flag to respect intentional user key removal
-    static let explicitDeletionFlagKey = "com.lingobar.macos.hasExplicitlyDeletedKey"
+    static let explicitDeletionFlagKey = "com.glossa.macos.hasExplicitlyDeletedKey"
+    static let legacyExplicitDeletionFlagKey = "com.lingobar.macos.hasExplicitlyDeletedKey"
 
     public private(set) var fallbackRecoveryWarning: String? = nil
 
@@ -91,10 +94,10 @@ public final class KeychainHelper {
     /// If conflicts are detected, stores them in indexed Keychain fallback accounts and purges UserDefaults.
     /// No secrets remain in plaintext UserDefaults.
     public func recoverFallbackKeys(service: String = defaultService) throws {
-        let fallbackKeys = ["com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
+        let fallbackKeys = ["com.glossa.macos.fallback_api_key", "com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
 
         // 1. If user explicitly deleted their key, purge residual fallback keys immediately without recovery
-        if UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) {
+        if UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) || UserDefaults.standard.bool(forKey: Self.legacyExplicitDeletionFlagKey) {
             for key in fallbackKeys {
                 UserDefaults.standard.removeObject(forKey: key)
             }
@@ -231,7 +234,7 @@ public final class KeychainHelper {
     /// Returns all distinct pending conflict candidates stored in Keychain or UserDefaults.
     public func getPendingConflictCandidates(account: String = defaultAccount, service: String = defaultService) throws -> [ConflictCandidate] {
         cleanupRedundantFallbacksIfNeeded(service: service)
-        if UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) {
+        if UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) || UserDefaults.standard.bool(forKey: Self.legacyExplicitDeletionFlagKey) {
             return []
         }
         let primaryKey = try getKey(account: account, service: service)
@@ -254,7 +257,7 @@ public final class KeychainHelper {
         }
 
         // 2. Also check UserDefaults if any residual unmigrated keys exist
-        let fallbackKeys = ["com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
+        let fallbackKeys = ["com.glossa.macos.fallback_api_key", "com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
         for key in fallbackKeys {
             if let val = UserDefaults.standard.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines), !val.isEmpty {
                 if !seenKeys.contains(val) {
@@ -305,7 +308,7 @@ public final class KeychainHelper {
 
     /// Discards a single conflict candidate by ID (Keychain account name or UserDefaults key).
     public func discardConflictCandidate(id: String, service: String = defaultService) throws {
-        let fallbackKeys = ["com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
+        let fallbackKeys = ["com.glossa.macos.fallback_api_key", "com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
         if fallbackKeys.contains(id) {
             UserDefaults.standard.removeObject(forKey: id)
         } else {
@@ -339,7 +342,7 @@ public final class KeychainHelper {
 
     /// Purges all residual fallback storage from UserDefaults and all fallback Keychain accounts.
     public func discardFallbackConflict(service: String = defaultService) throws {
-        let fallbackKeys = ["com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
+        let fallbackKeys = ["com.glossa.macos.fallback_api_key", "com.lingobar.macos.fallback_api_key", "GROQ_API_KEY"]
         for key in fallbackKeys {
             UserDefaults.standard.removeObject(forKey: key)
         }
@@ -464,7 +467,7 @@ public final class KeychainHelper {
     /// Retrieves the stored API key from the macOS Keychain.
     /// Returns nil if item does not exist or was explicitly deleted, or throws KeychainError on system failure.
     public func getKey(account: String = defaultAccount, service: String = defaultService) throws -> String? {
-        if account == Self.defaultAccount && UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) {
+        if account == Self.defaultAccount && (UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) || UserDefaults.standard.bool(forKey: Self.legacyExplicitDeletionFlagKey)) {
             return nil
         }
 
@@ -478,18 +481,42 @@ public final class KeychainHelper {
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound {
-            return nil
-        }
-        guard status == errSecSuccess else {
+        if status == errSecSuccess, let data = item as? Data, let key = String(data: data, encoding: .utf8) {
+            let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        } else if status != errSecSuccess && status != errSecItemNotFound {
             throw KeychainError.statusError(status)
         }
-        guard let data = item as? Data, let key = String(data: data, encoding: .utf8) else {
-            throw KeychainError.invalidData
+
+        // Dual-service fallback read: Check legacy service (com.lingobar.macos.apikey) and auto-migrate
+        if service == Self.defaultService {
+            let legacyQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: Self.legacyService,
+                kSecAttrAccount as String: account,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne
+            ]
+            var legacyItem: CFTypeRef?
+            let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
+            if legacyStatus == errSecSuccess, let legacyData = legacyItem as? Data, let legacyKeyStr = String(data: legacyData, encoding: .utf8) {
+                let trimmedLegacy = legacyKeyStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedLegacy.isEmpty {
+                    // Silently auto-migrate legacy key into the new Glossa Keychain service
+                    do {
+                        try saveKey(trimmedLegacy, account: account, service: Self.defaultService)
+                        NSLog("[Glossa] Auto-migrated API key for account '%@' from legacy LingoBar service", account)
+                    } catch {
+                        NSLog("[Glossa] Failed to auto-save migrated key: %@", error.localizedDescription)
+                    }
+                    return trimmedLegacy
+                }
+            }
         }
 
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        return nil
     }
 
     /// Deletes the stored API key from the macOS Keychain.
@@ -499,6 +526,8 @@ public final class KeychainHelper {
         // Persisted first so partial failure of Keychain calls can never resurrect an old key on restart.
         if account == Self.defaultAccount {
             UserDefaults.standard.set(true, forKey: Self.explicitDeletionFlagKey)
+            UserDefaults.standard.set(true, forKey: Self.legacyExplicitDeletionFlagKey)
+            UserDefaults.standard.removeObject(forKey: "com.glossa.macos.fallback_api_key")
             UserDefaults.standard.removeObject(forKey: "com.lingobar.macos.fallback_api_key")
             UserDefaults.standard.removeObject(forKey: "GROQ_API_KEY")
         }
@@ -514,6 +543,15 @@ public final class KeychainHelper {
             throw KeychainError.statusError(status)
         }
 
+        if service == Self.defaultService {
+            let legacyDeleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: Self.legacyService,
+                kSecAttrAccount as String: account
+            ]
+            _ = SecItemDelete(legacyDeleteQuery as CFDictionary)
+        }
+
         // 3. Delete secondary fallback accounts from Keychain
         if account == Self.defaultAccount {
             for acc in Self.getAllFallbackAccounts() {
@@ -526,6 +564,15 @@ public final class KeychainHelper {
                 if fallbackStatus != errSecSuccess && fallbackStatus != errSecItemNotFound {
                     throw KeychainError.statusError(fallbackStatus)
                 }
+
+                if service == Self.defaultService {
+                    let legacyFallbackQuery: [String: Any] = [
+                        kSecClass as String: kSecClassGenericPassword,
+                        kSecAttrService as String: Self.legacyService,
+                        kSecAttrAccount as String: acc
+                    ]
+                    _ = SecItemDelete(legacyFallbackQuery as CFDictionary)
+                }
             }
         }
     }
@@ -537,8 +584,11 @@ public final class KeychainHelper {
     public func migrateLegacyKeyIfNeeded(account: String = defaultAccount, service: String = defaultService) throws {
         // 1. If user explicitly deleted their key, legacy migration was marked, or V2 migration was marked, do not auto re-import
         if UserDefaults.standard.bool(forKey: Self.explicitDeletionFlagKey) ||
+           UserDefaults.standard.bool(forKey: Self.legacyExplicitDeletionFlagKey) ||
            UserDefaults.standard.bool(forKey: Self.legacyMigrationFlagKey) ||
-           UserDefaults.standard.bool(forKey: Self.migrationV2FlagKey) {
+           UserDefaults.standard.bool(forKey: "com.lingobar.macos.hasMigratedLegacyKey") ||
+           UserDefaults.standard.bool(forKey: Self.migrationV2FlagKey) ||
+           UserDefaults.standard.bool(forKey: "com.lingobar.macos.hasMigratedVaultV2") {
             return
         }
 

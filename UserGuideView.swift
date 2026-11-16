@@ -43,9 +43,9 @@ struct UserGuideView: View {
                         .foregroundColor(.blue)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("LingoBar")
+                        Text("Glossa")
                             .font(.system(size: 16, weight: .bold))
-                        Text(selectedLanguage == .english ? "Quick Start Guide & Shortcuts" : "භාවිත උපදෙස් සහ කෙටිමං")
+                        Text(selectedLanguage == .english ? "Glossa Guide & Shortcuts / භාවිත උපදෙස්" : "භාවිත උපදෙස් සහ කෙටිමං")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -76,8 +76,8 @@ struct UserGuideView: View {
                         iconColor: .blue,
                         title: selectedLanguage == .english ? "1. Instant Translation to Sinhala" : "1. සරල සිංහල පරිවර්තනය",
                         description: selectedLanguage == .english
-                            ? "Highlight any English text in any app (browser, document, chat) and press Option+Space or Option+Shift+L. LingoBar appears instantly with natural, everyday spoken Sinhala (සරල සිංහල)."
-                            : "ඕනෑම මෘදුකාංගයක ඇති ඉංග්‍රීසි පාඨයක් තෝරා (highlight කර) Option+Space හෝ Option+Shift+L ඔබන්න. එදිනෙදා ව්‍යවහාරික සරල සිංහල අර්ථය ක්ෂණිකව දිස්වනු ඇත.",
+                            ? "Highlight any English text in any app (browser, document, chat) and press Option+Space or Option+Shift+L. Glossa appears instantly with natural, everyday spoken Sinhala (සරල සිංහල)."
+                            : "ඕනෑම මෘදුකාංගයක ඇති ඉංග්‍රීසි පාඨයක් තෝරා (highlight කර) Option+Space හෝ Option+Shift+L ඔබන්න. Glossa මඟින් එදිනෙදා ව්‍යවහාරික සරල සිංහල අර්ථය ක්ෂණිකව දිස්වනු ඇත.",
                         shortcuts: [
                             ["⌥", "Space"],
                             ["⌥", "⇧", "L"]
@@ -90,8 +90,8 @@ struct UserGuideView: View {
                         iconColor: .purple,
                         title: selectedLanguage == .english ? "2. Professional Rewrite & Auto-Copy" : "2. වෘත්තීය ඉංග්‍රීසි සංස්කරණය සහ පිටපත් කිරීම",
                         description: selectedLanguage == .english
-                            ? "Draft an email, PR, or Slack message and press Option+Shift+R (or click 'Make Professional'). LingoBar fixes all grammatical errors, refines workplace tone, and automatically copies the polished sentence to your clipboard."
-                            : "ඔබ ලියූ ඉංග්‍රීසි වාක්‍යයක් තෝරා Option+Shift+R ඔබන්න. ව්‍යාකරණ දෝෂ නිවැරදි කර, පැහැදිලි වෘත්තීය මට්ටමේ වාක්‍යයක් සකසා ක්ෂණිකව Clipboard එකට Copy කර දෙනු ඇත.",
+                            ? "Draft an email, PR, or Slack message and press Option+Shift+R (or click 'Make Professional'). Glossa fixes all grammatical errors, refines workplace tone, and automatically copies the polished sentence to your clipboard."
+                            : "ඔබ ලියූ ඉංග්‍රීසි වාක්‍යයක් තෝරා Option+Shift+R ඔබන්න. Glossa මඟින් ව්‍යාකරණ දෝෂ නිවැරදි කර, පැහැදිලි වෘත්තීය මට්ටමේ වාක්‍යයක් සකසා ක්ෂණිකව Clipboard එකට Copy කර දෙනු ඇත.",
                         shortcuts: [
                             ["⌥", "⇧", "R"],
                             ["⌥", "Return"]
@@ -104,8 +104,8 @@ struct UserGuideView: View {
                         iconColor: .orange,
                         title: selectedLanguage == .english ? "3. Menu Bar Actions & Settings" : "3. මෙනු බාර් පහසුකම් සහ සැකසුම්",
                         description: selectedLanguage == .english
-                            ? "Click the LingoBar menu bar icon to trigger Translate or Rewrite on demand, open this User Guide, or access Settings to configure your API keys (Groq, OpenAI, or Gemini) securely in macOS Keychain."
-                            : "මෙනු බාර් හි ඇති LingoBar අයිකනය මඟින් පරිවර්තන, සංස්කරණ, මෙම උපදෙස් පත්‍රිකාව හෝ Settings වෙත පිවිසිය හැක. Groq, OpenAI සහ Gemini සේවාවන් Keychain මඟින් සුරක්ෂිතව භාවිතා කරන්න.",
+                            ? "Click the Glossa menu bar icon to trigger Translate or Rewrite on demand, open this User Guide, or access Settings to configure your API keys (Groq, OpenAI, or Gemini) securely in macOS Keychain."
+                            : "මෙනු බාර් හි ඇති Glossa අයිකනය මඟින් පරිවර්තන, සංස්කරණ, මෙම උපදෙස් පත්‍රිකාව හෝ Settings වෙත පිවිසිය හැක. Groq, OpenAI සහ Gemini සේවාවන් Keychain මඟින් සුරක්ෂිතව භාවිතා කරන්න.",
                         shortcuts: [
                             ["⌘", ","]
                         ]
@@ -290,8 +290,8 @@ struct UserGuideView: View {
             }
 
             Text(selectedLanguage == .english
-                ? "LingoBar functions as a lightweight background accessory. Enabling Launch at Login ensures your global shortcuts (⌥Space and ⌥⇧R) are immediately available each time your Mac starts."
-                : "LingoBar පසුබිමේ ක්‍රියාත්මක වන යෙදුමක් බැවින්, Mac පරිගණකය ආරම්භ වන විටම ක්‍රියාත්මක වීමෙන් ⌥Space සහ ⌥⇧R කෙටිමං ඕනෑම වේලාවක භාවිතයට සූදානම්ව පවතී.")
+                ? "Glossa functions as a lightweight background accessory. Enabling Launch at Login ensures your global shortcuts (⌥Space and ⌥⇧R) are immediately available each time your Mac starts."
+                : "Glossa පසුබිමේ ක්‍රියාත්මක වන යෙදුමක් බැවින්, Mac පරිගණකය ආරම්භ වන විටම ක්‍රියාත්මක වීමෙන් ⌥Space සහ ⌥⇧R කෙටිමං ඕනෑම වේලාවක භාවිතයට සූදානම්ව පවතී.")
                 .font(.system(size: 11.5))
                 .foregroundColor(.secondary)
                 .lineSpacing(3)
