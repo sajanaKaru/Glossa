@@ -1434,6 +1434,47 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
         }
     }
 
+    private func parseErrorMessage(from data: Data, provider: AIProvider, statusCode: Int) -> String? {
+        guard !data.isEmpty else { return nil }
+        let name = provider.displayName
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var extractedMessage: String?
+            var extractedCode: String?
+
+            if let errorObj = json["error"] as? [String: Any] {
+                extractedMessage = errorObj["message"] as? String
+                if let codeStr = errorObj["code"] as? String {
+                    extractedCode = codeStr
+                } else if let codeInt = errorObj["code"] as? Int {
+                    extractedCode = String(codeInt)
+                }
+            } else if let errorStr = json["error"] as? String {
+                extractedMessage = errorStr
+            } else if let msgStr = json["message"] as? String {
+                extractedMessage = msgStr
+            }
+
+            if let msg = extractedMessage, !msg.isEmpty {
+                if extractedCode == "insufficient_quota" || msg.lowercased().contains("quota") {
+                    let billingUrl: String
+                    switch provider {
+                    case .openAI:
+                        billingUrl = "platform.openai.com/account/billing"
+                    case .gemini:
+                        billingUrl = "aistudio.google.com"
+                    case .groq:
+                        billingUrl = "console.groq.com"
+                    }
+                    return "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
+                }
+                return "\(name) API error (\(statusCode)): \(msg)"
+            }
+        } else if let plainText = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !plainText.isEmpty {
+            return "\(name) API error (\(statusCode)): \(plainText)"
+        }
+        return nil
+    }
+
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let taskDesc = dataTask.taskDescription else {
             return
@@ -1452,6 +1493,9 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
                     let remainingSpace = maxErrorBufferSize - errorDataBuffer.count
                     let slice = data.prefix(remainingSpace)
                     errorDataBuffer.append(slice)
+                }
+                if let detailedMsg = parseErrorMessage(from: errorDataBuffer, provider: self.requestProvider, statusCode: self.responseStatusCode) {
+                    self.errorMessage = detailedMsg
                 }
                 return
             }
@@ -1494,6 +1538,9 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
                     let remainingSpace = maxErrorBufferSize - polishErrorBuffer.count
                     let slice = data.prefix(remainingSpace)
                     polishErrorBuffer.append(slice)
+                }
+                if let detailedMsg = parseErrorMessage(from: polishErrorBuffer, provider: self.activeProvider, statusCode: self.polishStatusCode) {
+                    self.polishErrorMessage = detailedMsg
                 }
                 return
             }
@@ -1651,26 +1698,8 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
 
             // If non-2xx status, parse the accumulated complete JSON error body
             if !(200...299).contains(responseStatusCode) {
-                let name = self.requestProvider.displayName
-                if !errorDataBuffer.isEmpty,
-                   let json = try? JSONSerialization.jsonObject(with: errorDataBuffer) as? [String: Any],
-                   let errorObj = json["error"] as? [String: Any] {
-                    let code = errorObj["code"] as? String
-                    let msg = errorObj["message"] as? String ?? "Unable to complete request."
-                    if code == "insufficient_quota" || msg.lowercased().contains("quota") {
-                        let billingUrl: String
-                        switch self.requestProvider {
-                        case .openAI:
-                            billingUrl = "platform.openai.com/account/billing"
-                        case .gemini:
-                            billingUrl = "aistudio.google.com"
-                        case .groq:
-                            billingUrl = "console.groq.com"
-                        }
-                        self.errorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
-                    } else {
-                        self.errorMessage = "\(name) API error (\(responseStatusCode)): \(msg)"
-                    }
+                if let detailedMsg = parseErrorMessage(from: errorDataBuffer, provider: self.requestProvider, statusCode: self.responseStatusCode) {
+                    self.errorMessage = detailedMsg
                 }
                 errorDataBuffer.removeAll()
                 return
@@ -1705,26 +1734,8 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
             }
 
             if !(200...299).contains(polishStatusCode) {
-                let name = self.activeProvider.displayName
-                if !polishErrorBuffer.isEmpty,
-                   let json = try? JSONSerialization.jsonObject(with: polishErrorBuffer) as? [String: Any],
-                   let errorObj = json["error"] as? [String: Any] {
-                    let code = errorObj["code"] as? String
-                    let msg = errorObj["message"] as? String ?? "Unable to complete request."
-                    if code == "insufficient_quota" || msg.lowercased().contains("quota") {
-                        let billingUrl: String
-                        switch self.activeProvider {
-                        case .openAI:
-                            billingUrl = "platform.openai.com/account/billing"
-                        case .gemini:
-                            billingUrl = "aistudio.google.com"
-                        case .groq:
-                            billingUrl = "console.groq.com"
-                        }
-                        self.polishErrorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
-                    } else {
-                        self.polishErrorMessage = "\(name) API error (\(polishStatusCode)): \(msg)"
-                    }
+                if let detailedMsg = parseErrorMessage(from: polishErrorBuffer, provider: self.activeProvider, statusCode: self.polishStatusCode) {
+                    self.polishErrorMessage = detailedMsg
                 }
                 polishErrorBuffer.removeAll()
                 return

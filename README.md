@@ -1,7 +1,7 @@
 # Glossa (ග්‍ලෝසා)
 
 <p align="center">
-  <img src="Resources/AppIcon.icns" alt="Glossa App Icon" width="128" height="128" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);" />
+  <img src="Resources/AppIcon.png" alt="Glossa App Icon" width="128" height="128" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);" />
 </p>
 
 <p align="center">
@@ -68,7 +68,7 @@ No browser tabs. No subscription fees. No data harvesting. Your API keys are kep
   Seamlessly choose between:
   - **Groq** (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant` — ultra-fast sub-second latency)
   - **OpenAI** (`gpt-4o-mini`, `gpt-4o`)
-  - **Google Gemini** (`gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-flash`, `gemini-1.5-pro`)<br />
+  - **Google Gemini** (`gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-4-argon`, `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-flash`, `gemini-1.5-pro`)<br />
   All credentials are saved securely in your macOS Keychain (`kSecClassGenericPassword`).
 
 ---
