@@ -160,7 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let hc = NSHostingController(rootView: popoverView)
         self.hostingController = hc
 
-        panel = InlinePopoverPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 140))
+        panel = InlinePopoverPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 140))
         panel.contentViewController = hc
 
         // Menu Bar Companion
@@ -304,13 +304,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     self?.dismissPopover()
                 }
+            } else if flags.contains(.option) && (event.keyCode == 36 || event.keyCode == 76) && (self?.panel.isVisible == true) { // Option + Return to polish
+                DispatchQueue.main.async {
+                    self?.viewModel.runProfessionalPolishAndCopy()
+                }
             }
         }
 
         // 3. Local Monitor for events when LingoBar is foregrounded
         localKeyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            if event.keyCode == 53 && (self?.panel.isVisible == true) { // Esc key
-                self?.dismissPopover()
+            guard let self = self, self.panel.isVisible else { return event }
+            if event.keyCode == 53 { // Esc key
+                self.dismissPopover()
+                return nil
+            }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags.contains(.option) && (event.keyCode == 36 || event.keyCode == 76) { // Option + Return
+                self.viewModel.runProfessionalPolishAndCopy()
                 return nil
             }
             return event
@@ -402,13 +412,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.updateMenuBarMenu()
             }
             .store(in: &cancellables)
+
+        viewModel.$polishedOutputText
+            .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updatePopoverSize()
+            }
+            .store(in: &cancellables)
+
+        viewModel.$isPolishing
+            .sink { [weak self] _ in
+                self?.updatePopoverSize()
+            }
+            .store(in: &cancellables)
+
+        viewModel.$polishErrorMessage
+            .sink { [weak self] _ in
+                self?.updatePopoverSize()
+            }
+            .store(in: &cancellables)
+
+        viewModel.$polishedAutoCopiedToast
+            .sink { [weak self] _ in
+                self?.updatePopoverSize()
+            }
+            .store(in: &cancellables)
     }
 
     private func updatePopoverSize() {
         guard panel.isVisible, let hc = hostingController, let anchor = currentAnchorRect else { return }
-        let fitting = hc.sizeThatFits(in: CGSize(width: 340, height: 320))
-        let targetHeight = min(max(fitting.height, 120), 280)
-        let newSize = NSSize(width: 340, height: targetHeight)
+        let fitting = hc.sizeThatFits(in: CGSize(width: 380, height: 600))
+        let targetHeight = min(max(fitting.height, 120), 520)
+        let newSize = NSSize(width: 380, height: targetHeight)
         
         if abs(panel.frame.height - newSize.height) > 2 {
             positionPanel(anchoredTo: anchor, desiredHeight: newSize.height)
@@ -470,7 +505,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let visibleFrame = screen.visibleFrame
-        let panelWidth: CGFloat = 340
+        let panelWidth: CGFloat = 380
         let panelHeight: CGFloat = desiredHeight
         let margin: CGFloat = 8
 
@@ -694,6 +729,27 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
     @Published var isAccessibilityTrusted: Bool = true
     @Published var hotKeyConflictMessage: String = ""
 
+    // Dedicated Professional Grammar & Polishing state
+    @Published var isPolishing: Bool = false
+    @Published var polishedOutputText: String = ""
+    @Published var polishedAutoCopiedToast: Bool = false
+    @Published var polishedCopied: Bool = false
+    @Published var polishErrorMessage: String = ""
+
+    // Backward compatibility aliases
+    var isTranslating: Bool {
+        get { isLoading }
+        set { isLoading = newValue }
+    }
+    var sinhalaOutputText: String {
+        get { outputText }
+        set { outputText = newValue }
+    }
+    var sinhalaCopied: Bool {
+        get { copied }
+        set { copied = newValue }
+    }
+
     @Published var apiKey: String = ""
     @Published var activeProvider: AIProvider = AIProvider.current
     @Published var storageError: String = ""
@@ -711,6 +767,16 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
     private var responseStatusCode: Int = 200
     private var isEventStream: Bool = false
     private var receivedDone: Bool = false
+
+    // Polish task lifecycle
+    private var polishTask: URLSessionDataTask?
+    private var polishRequestId: UUID = UUID()
+    private var polishStreamBuffer = Data()
+    private var polishErrorBuffer = Data()
+    private var polishStatusCode: Int = 200
+    private var polishIsEventStream: Bool = false
+    private var polishReceivedDone: Bool = false
+    private var polishToastWorkItem: DispatchWorkItem?
 
     override init() {
         super.init()
@@ -733,6 +799,32 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
 
     func cancelInFlightTask() {
         // Invalidate request ID first so any queued or concurrent delegate callbacks fail the match guard immediately
+        currentRequestId = UUID()
+        if isTaskInFlight || currentTask != nil {
+            currentTask?.cancel()
+            currentTask = nil
+            isTaskInFlight = false
+        }
+        isLoading = false
+        streamDataBuffer.removeAll()
+        errorDataBuffer.removeAll()
+        cancelPolishTask()
+    }
+
+    func cancelPolishTask() {
+        polishRequestId = UUID()
+        if polishTask != nil {
+            polishTask?.cancel()
+            polishTask = nil
+        }
+        isPolishing = false
+        polishStreamBuffer.removeAll()
+        polishErrorBuffer.removeAll()
+        polishToastWorkItem?.cancel()
+        polishToastWorkItem = nil
+    }
+
+    func cancelTranslateTaskOnly() {
         currentRequestId = UUID()
         if isTaskInFlight || currentTask != nil {
             currentTask?.cancel()
@@ -787,6 +879,13 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
         copied = false
         isTruncated = false
         isManualInputMode = false
+
+        // Polish state reset
+        isPolishing = false
+        polishedOutputText = ""
+        polishedAutoCopiedToast = false
+        polishedCopied = false
+        polishErrorMessage = ""
     }
 
     func runTranslate() {
@@ -962,101 +1061,364 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
 
+    // MARK: - Professional Grammar Polish & Auto-Copy Implementation
+    func runProfessionalPolishAndCopy() {
+        guard !isPolishing, !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        cancelPolishTask()
+
+        let provider = AIProvider.current
+        self.activeProvider = provider
+
+        let key: String
+        do {
+            guard let retrieved = try KeychainHelper.shared.getKey(account: provider.keychainAccount), !retrieved.isEmpty else {
+                self.polishErrorMessage = "\(provider.displayName) API Key not configured. Please open Settings (⌘,) to configure."
+                return
+            }
+            key = retrieved
+        } catch {
+            self.polishErrorMessage = "Keychain error accessing \(provider.displayName) API Key: \(error.localizedDescription)"
+            return
+        }
+
+        let model = provider.selectedModel
+        let url = provider.chatEndpoint
+
+        let requestId = UUID()
+        polishRequestId = requestId
+        isPolishing = true
+        polishErrorMessage = ""
+        polishedOutputText = ""
+        polishedCopied = false
+        polishedAutoCopiedToast = false
+        polishStatusCode = 200
+        polishIsEventStream = false
+        polishReceivedDone = false
+        polishStreamBuffer.removeAll()
+        polishErrorBuffer.removeAll()
+
+        let prompt = """
+        You are an elite English editor and corporate communication specialist.
+        Polish the provided English text to adhere to impeccable grammar, correct punctuation, natural syntax, and a confident, professional workplace tone.
+        Rules:
+        1. Fix all grammatical flaws, spelling errors, awkward sentence structures, and typos.
+        2. Ensure the tone is polished, respectful, clear, and professional.
+        3. Preserve the exact original core intent and meaning without adding unrequested information.
+        4. Output ONLY the polished English sentence(s) with zero preambles, introductory commentary, or quotation marks.
+
+        Text to polish:
+        \"\"\"\(inputText)\"\"\"
+        """
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "user", "content": prompt]
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1024,
+            "stream": true
+        ]
+
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        let task = session.dataTask(with: request)
+        task.taskDescription = requestId.uuidString
+        self.polishTask = task
+        task.resume()
+    }
+
+    private func autoCopyPolishedText(_ text: String) {
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.polishedCopied = true
+            self.polishedAutoCopiedToast = true
+
+            // Tactile haptic feedback for physical macOS confirmation
+            NSHapticFeedbackManager.defaultPerformer.perform(
+                .alignment,
+                performanceTime: .default
+            )
+
+            self.polishToastWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                self?.polishedAutoCopiedToast = false
+                self?.polishToastWorkItem = nil
+            }
+            self.polishToastWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: item)
+        }
+    }
+
+    func copyPolishedText() {
+        guard !polishedOutputText.isEmpty else { return }
+        autoCopyPolishedText(polishedOutputText)
+    }
+
+    private func sanitizePolishedText(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Strip markdown code fences if present
+        if result.hasPrefix("```") {
+            if let firstNewline = result.firstIndex(of: "\n") {
+                result = String(result[result.index(after: firstNewline)...])
+            }
+            if result.hasSuffix("```") {
+                result = String(result.dropLast(3))
+            }
+            result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Strip common AI preambles
+        let preambles = [
+            "Here is the polished version:",
+            "Here is the polished sentence:",
+            "Here is the polished text:",
+            "Polished version:",
+            "Polished sentence:",
+            "Polished text:"
+        ]
+        for preamble in preambles {
+            if result.lowercased().hasPrefix(preamble.lowercased()) {
+                result = String(result.dropFirst(preamble.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        // Strip surrounding double or single quotation marks
+        if (result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2) ||
+           (result.hasPrefix("“") && result.hasSuffix("”") && result.count >= 2) ||
+           (result.hasPrefix("'") && result.hasSuffix("'") && result.count >= 2) {
+            result = String(result.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return result
+    }
+
     // MARK: - URLSessionDataDelegate (HTTP Status & Multibyte UTF-8 SSE Streaming)
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        guard let taskDesc = dataTask.taskDescription, taskDesc == currentRequestId.uuidString else {
+        guard let taskDesc = dataTask.taskDescription else {
+            completionHandler(.cancel)
+            return
+        }
+
+        let isTranslate = (taskDesc == currentRequestId.uuidString)
+        let isPolish = (taskDesc == polishRequestId.uuidString)
+
+        guard isTranslate || isPolish else {
             completionHandler(.cancel)
             return
         }
 
         if let httpResponse = response as? HTTPURLResponse {
             let code = httpResponse.statusCode
-            self.responseStatusCode = code
-
+            var isStream = false
             if let mime = httpResponse.mimeType?.lowercased() {
-                self.isEventStream = mime.contains("text/event-stream")
+                isStream = mime.contains("text/event-stream")
             } else if let contentType = httpResponse.allHeaderFields["Content-Type"] as? String {
-                self.isEventStream = contentType.lowercased().contains("text/event-stream")
+                isStream = contentType.lowercased().contains("text/event-stream")
             }
 
-            if !(200...299).contains(code) {
-                // Non-2xx HTTP error status
-                self.isLoading = false
-                let name = self.requestProvider.displayName
-                switch code {
-                case 400:
-                    if self.requestProvider == .gemini {
-                        self.errorMessage = "\(name) API error (400): Invalid or unauthorized API key."
-                    } else {
-                        self.errorMessage = "\(name) API error (400): Bad request."
-                    }
-                case 401:
-                    self.errorMessage = "\(name) API error (401): Invalid or unauthorized API key."
-                case 403:
-                    self.errorMessage = "\(name) API error (403): Access forbidden or restricted API key."
-                case 429:
-                    self.errorMessage = "\(name) API error (429): Rate limit or quota exceeded. Try again shortly."
-                default:
-                    self.errorMessage = "\(name) API error (\(code)): Unable to complete request."
+            if isTranslate {
+                self.responseStatusCode = code
+                self.isEventStream = isStream
+
+                if !(200...299).contains(code) {
+                    self.isLoading = false
+                    self.errorMessage = formatErrorMessage(for: self.requestProvider, code: code)
+                } else if !isStream {
+                    let name = self.requestProvider.displayName
+                    self.errorMessage = "\(name) API error: Unexpected non-streaming response."
+                    self.cancelTranslateTaskOnly()
+                    completionHandler(.cancel)
+                    return
                 }
-            } else if !self.isEventStream {
-                // 2xx status but not streaming response: cancel task immediately to stop data receipt
-                let name = self.requestProvider.displayName
-                self.errorMessage = "\(name) API error: Unexpected non-streaming response."
-                self.cancelInFlightTask()
-                completionHandler(.cancel)
-                return
+            } else if isPolish {
+                self.polishStatusCode = code
+                self.polishIsEventStream = isStream
+
+                if !(200...299).contains(code) {
+                    self.isPolishing = false
+                    self.polishErrorMessage = formatErrorMessage(for: self.activeProvider, code: code)
+                } else if !isStream {
+                    let name = self.activeProvider.displayName
+                    self.polishErrorMessage = "\(name) API error: Unexpected non-streaming response."
+                    self.cancelPolishTask()
+                    completionHandler(.cancel)
+                    return
+                }
             }
         }
         completionHandler(.allow)
     }
 
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard let taskDesc = dataTask.taskDescription, taskDesc == currentRequestId.uuidString else {
-            return
-        }
-
-        // If non-2xx status, accumulate complete error response body (capped at 64KB)
-        if !(200...299).contains(responseStatusCode) {
-            let maxErrorBufferSize = 64 * 1024
-            if errorDataBuffer.count < maxErrorBufferSize {
-                let remainingSpace = maxErrorBufferSize - errorDataBuffer.count
-                let slice = data.prefix(remainingSpace)
-                errorDataBuffer.append(slice)
+    private func formatErrorMessage(for provider: AIProvider, code: Int) -> String {
+        let name = provider.displayName
+        switch code {
+        case 400:
+            if provider == .gemini {
+                return "\(name) API error (400): Invalid or unauthorized API key."
+            } else {
+                return "\(name) API error (400): Bad request."
             }
+        case 401:
+            return "\(name) API error (401): Invalid or unauthorized API key."
+        case 403:
+            return "\(name) API error (403): Access forbidden or restricted API key."
+        case 429:
+            return "\(name) API error (429): Rate limit or quota exceeded. Try again shortly."
+        default:
+            return "\(name) API error (\(code)): Unable to complete request."
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let taskDesc = dataTask.taskDescription else {
             return
         }
 
-        // Multibyte-safe UTF-8 buffering: accumulate bytes and only decode complete lines at '\n'
-        streamDataBuffer.append(data)
+        let isTranslate = (taskDesc == currentRequestId.uuidString)
+        let isPolish = (taskDesc == polishRequestId.uuidString)
 
-        let maxStreamBufferSize = 128 * 1024 // 128KB
-        let newlineByte: UInt8 = 0x0A // \n
-        while let newlineIndex = streamDataBuffer.firstIndex(of: newlineByte) {
-            let lineData = streamDataBuffer.subdata(in: 0..<newlineIndex)
-            streamDataBuffer.removeSubrange(0...newlineIndex)
+        guard isTranslate || isPolish else { return }
 
-            // Check individual line size limit before decoding
-            if lineData.count > maxStreamBufferSize {
-                self.errorMessage = "Line exceeded maximum allowed size."
-                self.cancelInFlightTask()
+        if isTranslate {
+            // If non-2xx status, accumulate complete error response body (capped at 64KB)
+            if !(200...299).contains(responseStatusCode) {
+                let maxErrorBufferSize = 64 * 1024
+                if errorDataBuffer.count < maxErrorBufferSize {
+                    let remainingSpace = maxErrorBufferSize - errorDataBuffer.count
+                    let slice = data.prefix(remainingSpace)
+                    errorDataBuffer.append(slice)
+                }
                 return
             }
 
-            // Safely decode the completed line chunk
-            guard let lineStr = String(data: lineData, encoding: .utf8) else {
-                self.hadStreamParseError = true
-                continue
+            // Multibyte-safe UTF-8 buffering: accumulate bytes and only decode complete lines at '\n'
+            streamDataBuffer.append(data)
+
+            let maxStreamBufferSize = 128 * 1024 // 128KB
+            let newlineByte: UInt8 = 0x0A // \n
+            while let newlineIndex = streamDataBuffer.firstIndex(of: newlineByte) {
+                let lineData = streamDataBuffer.subdata(in: 0..<newlineIndex)
+                streamDataBuffer.removeSubrange(0...newlineIndex)
+
+                // Check individual line size limit before decoding
+                if lineData.count > maxStreamBufferSize {
+                    self.errorMessage = "Line exceeded maximum allowed size."
+                    self.cancelTranslateTaskOnly()
+                    return
+                }
+
+                // Safely decode the completed line chunk
+                guard let lineStr = String(data: lineData, encoding: .utf8) else {
+                    self.hadStreamParseError = true
+                    continue
+                }
+
+                processSSELine(lineStr)
             }
 
-            processSSELine(lineStr)
+            // Check remaining tail buffer size after draining all complete lines
+            if streamDataBuffer.count > maxStreamBufferSize {
+                self.errorMessage = "Stream buffer tail exceeded maximum allowed size."
+                self.cancelTranslateTaskOnly()
+                return
+            }
+        } else if isPolish {
+            if !(200...299).contains(polishStatusCode) {
+                let maxErrorBufferSize = 64 * 1024
+                if polishErrorBuffer.count < maxErrorBufferSize {
+                    let remainingSpace = maxErrorBufferSize - polishErrorBuffer.count
+                    let slice = data.prefix(remainingSpace)
+                    polishErrorBuffer.append(slice)
+                }
+                return
+            }
+
+            polishStreamBuffer.append(data)
+
+            let maxStreamBufferSize = 128 * 1024
+            let newlineByte: UInt8 = 0x0A
+            while let newlineIndex = polishStreamBuffer.firstIndex(of: newlineByte) {
+                let lineData = polishStreamBuffer.subdata(in: 0..<newlineIndex)
+                polishStreamBuffer.removeSubrange(0...newlineIndex)
+
+                if lineData.count > maxStreamBufferSize {
+                    self.polishErrorMessage = "Line exceeded maximum allowed size."
+                    self.cancelPolishTask()
+                    return
+                }
+
+                guard let lineStr = String(data: lineData, encoding: .utf8) else {
+                    continue
+                }
+
+                processPolishSSELine(lineStr)
+            }
+
+            if polishStreamBuffer.count > maxStreamBufferSize {
+                self.polishErrorMessage = "Stream buffer tail exceeded maximum allowed size."
+                self.cancelPolishTask()
+                return
+            }
+        }
+    }
+
+    private func processPolishSSELine(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed.hasPrefix(":") { return }
+
+        if trimmed == "data: [DONE]" {
+            self.polishReceivedDone = true
+            self.isPolishing = false
+            return
         }
 
-        // Check remaining tail buffer size after draining all complete lines
-        if streamDataBuffer.count > maxStreamBufferSize {
-            self.errorMessage = "Stream buffer tail exceeded maximum allowed size."
-            self.cancelInFlightTask()
-            return
+        if trimmed.hasPrefix("data: ") {
+            let jsonStr = String(trimmed.dropFirst(6))
+            guard let jsonData = jsonStr.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+                return
+            }
+
+            // Check for API-level error returned within stream
+            if let errorObj = json["error"] as? [String: Any], let msg = errorObj["message"] as? String {
+                let code = errorObj["code"] as? String
+                let name = self.activeProvider.displayName
+                if code == "insufficient_quota" || msg.lowercased().contains("quota") {
+                    let billingUrl: String
+                    switch self.activeProvider {
+                    case .openAI:
+                        billingUrl = "platform.openai.com/account/billing"
+                    case .gemini:
+                        billingUrl = "aistudio.google.com"
+                    case .groq:
+                        billingUrl = "console.groq.com"
+                    }
+                    self.polishErrorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
+                } else {
+                    self.polishErrorMessage = "\(name) API error: \(msg)"
+                }
+                self.cancelPolishTask()
+                return
+            }
+
+            if let choices = json["choices"] as? [[String: Any]], let first = choices.first {
+                if let delta = first["delta"] as? [String: Any],
+                   let content = delta["content"] as? String {
+                    self.polishedOutputText.append(content)
+                }
+            }
         }
     }
 
@@ -1114,63 +1476,121 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let taskDesc = task.taskDescription, taskDesc == currentRequestId.uuidString else {
+        guard let taskDesc = task.taskDescription else {
             return
         }
 
-        self.isTaskInFlight = false
-        self.currentTask = nil
-        self.isLoading = false
+        let isTranslate = (taskDesc == currentRequestId.uuidString)
+        let isPolish = (taskDesc == polishRequestId.uuidString)
 
-        if let error = error as NSError? {
-            if error.code == NSURLErrorCancelled { return }
-            self.errorMessage = error.localizedDescription
-            return
-        }
+        guard isTranslate || isPolish else { return }
 
-        // If non-2xx status, parse the accumulated complete JSON error body
-        if !(200...299).contains(responseStatusCode) {
-            let name = self.requestProvider.displayName
-            if !errorDataBuffer.isEmpty,
-               let json = try? JSONSerialization.jsonObject(with: errorDataBuffer) as? [String: Any],
-               let errorObj = json["error"] as? [String: Any] {
-                let code = errorObj["code"] as? String
-                let msg = errorObj["message"] as? String ?? "Unable to complete request."
-                if code == "insufficient_quota" || msg.lowercased().contains("quota") {
-                    let billingUrl: String
-                    switch self.requestProvider {
-                    case .openAI:
-                        billingUrl = "platform.openai.com/account/billing"
-                    case .gemini:
-                        billingUrl = "aistudio.google.com"
-                    case .groq:
-                        billingUrl = "console.groq.com"
+        if isTranslate {
+            self.isTaskInFlight = false
+            self.currentTask = nil
+            self.isLoading = false
+
+            if let error = error as NSError? {
+                if error.code == NSURLErrorCancelled { return }
+                self.errorMessage = error.localizedDescription
+                return
+            }
+
+            // If non-2xx status, parse the accumulated complete JSON error body
+            if !(200...299).contains(responseStatusCode) {
+                let name = self.requestProvider.displayName
+                if !errorDataBuffer.isEmpty,
+                   let json = try? JSONSerialization.jsonObject(with: errorDataBuffer) as? [String: Any],
+                   let errorObj = json["error"] as? [String: Any] {
+                    let code = errorObj["code"] as? String
+                    let msg = errorObj["message"] as? String ?? "Unable to complete request."
+                    if code == "insufficient_quota" || msg.lowercased().contains("quota") {
+                        let billingUrl: String
+                        switch self.requestProvider {
+                        case .openAI:
+                            billingUrl = "platform.openai.com/account/billing"
+                        case .gemini:
+                            billingUrl = "aistudio.google.com"
+                        case .groq:
+                            billingUrl = "console.groq.com"
+                        }
+                        self.errorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
+                    } else {
+                        self.errorMessage = "\(name) API error (\(responseStatusCode)): \(msg)"
                     }
-                    self.errorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
+                }
+                errorDataBuffer.removeAll()
+                return
+            }
+
+            // Flush any trailing line in buffer
+            if !streamDataBuffer.isEmpty {
+                if let trailingStr = String(data: streamDataBuffer, encoding: .utf8) {
+                    processSSELine(trailingStr)
                 } else {
-                    self.errorMessage = "\(name) API error (\(responseStatusCode)): \(msg)"
+                    self.hadStreamParseError = true
+                }
+                streamDataBuffer.removeAll()
+            }
+
+            // Validate stream completeness for successful HTTP responses
+            if (200...299).contains(responseStatusCode) && errorMessage.isEmpty {
+                if outputText.isEmpty {
+                    self.errorMessage = "Stream completed with empty output."
+                } else if !receivedDone {
+                    self.errorMessage = "Stream interrupted before completion."
                 }
             }
-            errorDataBuffer.removeAll()
-            return
-        }
+        } else if isPolish {
+            self.polishTask = nil
+            self.isPolishing = false
 
-        // Flush any trailing line in buffer
-        if !streamDataBuffer.isEmpty {
-            if let trailingStr = String(data: streamDataBuffer, encoding: .utf8) {
-                processSSELine(trailingStr)
-            } else {
-                self.hadStreamParseError = true
+            if let error = error as NSError? {
+                if error.code == NSURLErrorCancelled { return }
+                self.polishErrorMessage = error.localizedDescription
+                return
             }
-            streamDataBuffer.removeAll()
-        }
 
-        // Validate stream completeness for successful HTTP responses
-        if (200...299).contains(responseStatusCode) && errorMessage.isEmpty {
-            if outputText.isEmpty {
-                self.errorMessage = "Stream completed with empty output."
-            } else if !receivedDone {
-                self.errorMessage = "Stream interrupted before completion."
+            if !(200...299).contains(polishStatusCode) {
+                let name = self.activeProvider.displayName
+                if !polishErrorBuffer.isEmpty,
+                   let json = try? JSONSerialization.jsonObject(with: polishErrorBuffer) as? [String: Any],
+                   let errorObj = json["error"] as? [String: Any] {
+                    let code = errorObj["code"] as? String
+                    let msg = errorObj["message"] as? String ?? "Unable to complete request."
+                    if code == "insufficient_quota" || msg.lowercased().contains("quota") {
+                        let billingUrl: String
+                        switch self.activeProvider {
+                        case .openAI:
+                            billingUrl = "platform.openai.com/account/billing"
+                        case .gemini:
+                            billingUrl = "aistudio.google.com"
+                        case .groq:
+                            billingUrl = "console.groq.com"
+                        }
+                        self.polishErrorMessage = "\(name) API error: You have exceeded your account quota. Check billing at \(billingUrl)."
+                    } else {
+                        self.polishErrorMessage = "\(name) API error (\(polishStatusCode)): \(msg)"
+                    }
+                }
+                polishErrorBuffer.removeAll()
+                return
+            }
+
+            if !polishStreamBuffer.isEmpty {
+                if let trailingStr = String(data: polishStreamBuffer, encoding: .utf8) {
+                    processPolishSSELine(trailingStr)
+                }
+                polishStreamBuffer.removeAll()
+            }
+
+            if (200...299).contains(polishStatusCode) && polishErrorMessage.isEmpty {
+                if polishedOutputText.isEmpty {
+                    self.polishErrorMessage = "Stream completed with empty output."
+                } else {
+                    self.polishedOutputText = sanitizePolishedText(self.polishedOutputText)
+                    autoCopyPolishedText(self.polishedOutputText)
+                }
             }
         }
     }
@@ -1201,24 +1621,6 @@ struct InlinePopoverView: View {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.7)
-                }
-
-                if !vm.outputText.isEmpty {
-                    Button(action: {
-                        vm.copyAndDismiss(onDismiss: onClose)
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: vm.copied ? "checkmark.circle.fill" : "doc.on.doc")
-                            Text(vm.copied ? "Copied" : "Copy")
-                        }
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(vm.copied ? .green : .blue)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.12))
-                        .cornerRadius(4)
-                    }
-                    .buttonStyle(.plain)
                 }
 
                 Button(action: {
@@ -1345,9 +1747,33 @@ struct InlinePopoverView: View {
                 }
             }
 
-            // Translation Content with Smooth ScrollView & Dynamic Clamped Height
+            // Preserved Sinhala Translation Card
             if !vm.outputText.isEmpty || vm.isLoading || !vm.errorMessage.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Sinhala (සරල සිංහල)")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        if !vm.outputText.isEmpty {
+                            Button(action: {
+                                vm.copyAndDismiss(onDismiss: onClose)
+                            }) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: vm.copied ? "checkmark.circle.fill" : "doc.on.doc")
+                                    Text(vm.copied ? "Copied" : "Copy")
+                                }
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(vm.copied ? .green : .blue)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.blue.opacity(0.12))
+                                .cornerRadius(4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
                     if !vm.errorMessage.isEmpty {
                         Text(vm.errorMessage)
                             .font(.system(size: 11.5))
@@ -1355,29 +1781,159 @@ struct InlinePopoverView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else if vm.outputText.isEmpty && vm.isLoading {
                         Text(vm.loadingPlaceholder)
-                            .font(.system(size: 13))
+                            .font(.system(size: 12.5))
                             .foregroundColor(.secondary)
                             .italic()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ScrollView(.vertical, showsIndicators: true) {
                             Text(vm.outputText)
-                                .font(.system(size: 13.5, weight: .medium))
-                                .lineSpacing(3)
+                                .font(.system(size: 13, weight: .medium))
+                                .lineSpacing(2.5)
                                 .foregroundColor(.primary)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 2)
+                                .padding(.vertical, 1)
                         }
-                        .frame(maxHeight: 200)
+                        .frame(maxHeight: 120)
                     }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !vm.outputText.isEmpty {
-                        vm.copyAndDismiss(onDismiss: onClose)
+                .padding(8)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(8)
+            }
+
+            // Action Bar: Make Professional Button
+            if !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack {
+                    Button(action: {
+                        vm.runProfessionalPolishAndCopy()
+                    }) {
+                        HStack(spacing: 5) {
+                            if vm.isPolishing {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.7)
+                                Text("Polishing English...")
+                                    .font(.system(size: 11, weight: .semibold))
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 10, weight: .bold))
+                                Text("✨ Make Professional & Copy")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(vm.isPolishing ? Color.purple.opacity(0.6) : Color.purple)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(vm.isPolishing || vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.return, modifiers: [.option])
+
+                    Spacer()
+
+                    HStack(spacing: 3) {
+                        Text("⌥ Return")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12))
+                            .cornerRadius(4)
                     }
                 }
+            }
+
+            // Polished English Result Card (Option A Stacked Layout)
+            if vm.isPolishing || !vm.polishedOutputText.isEmpty || !vm.polishErrorMessage.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(.purple)
+                                .font(.system(size: 10))
+                            Text("Polished Professional English")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundColor(.primary.opacity(0.9))
+                        }
+
+                        Spacer()
+
+                        // Auto-copied Toast Pill
+                        if vm.polishedAutoCopiedToast {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("✓ Copied to Clipboard!")
+                            }
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.18))
+                            .cornerRadius(4)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+
+                        // Manual Copy Button
+                        if !vm.polishedOutputText.isEmpty {
+                            Button(action: {
+                                vm.copyPolishedText()
+                            }) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: vm.polishedCopied ? "checkmark" : "doc.on.doc")
+                                    Text(vm.polishedCopied ? "Copied" : "Copy")
+                                }
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(vm.polishedCopied ? .green : .purple)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.purple.opacity(0.12))
+                                .cornerRadius(4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if !vm.polishErrorMessage.isEmpty {
+                        Text(vm.polishErrorMessage)
+                            .font(.system(size: 11.5))
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if vm.polishedOutputText.isEmpty && vm.isPolishing {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.7)
+                            Text("Refining grammar and elevating workplace tone...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .italic()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                    } else {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            Text(vm.polishedOutputText)
+                                .font(.system(size: 13, weight: .medium))
+                                .lineSpacing(2.5)
+                                .foregroundColor(.primary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 1)
+                        }
+                        .frame(maxHeight: 140)
+                    }
+                }
+                .padding(8)
+                .background(Color.purple.opacity(0.08))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.purple.opacity(0.25), lineWidth: 1)
+                )
             }
 
             // Truncation Warning Banner (if hit length limit)
@@ -1406,14 +1962,14 @@ struct InlinePopoverView: View {
 
             // Subdued Hint
             HStack {
-                Text(vm.isManualInputMode && vm.outputText.isEmpty ? "Press ↵ to translate • Esc to dismiss" : "Click to copy • Esc to dismiss")
+                Text(vm.isManualInputMode && vm.outputText.isEmpty ? "Press ↵ to translate • ⌥↵ to polish • Esc to dismiss" : "⌥↵ to polish • Click text to copy • Esc to dismiss")
                     .font(.system(size: 9.5))
                     .foregroundColor(.secondary.opacity(0.6))
                 Spacer()
             }
         }
         .padding(12)
-        .frame(width: 340)
+        .frame(width: 380)
         .background(
             ZStack {
                 VisualEffectBlur(material: .popover, blendingMode: .behindWindow)
@@ -1426,6 +1982,8 @@ struct InlinePopoverView: View {
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 5)
+        .animation(.easeInOut(duration: 0.2), value: vm.polishedAutoCopiedToast)
+        .animation(.easeInOut(duration: 0.2), value: vm.isPolishing)
         .onAppear {
             vm.isAccessibilityTrusted = AXIsProcessTrustedWithOptions(nil)
         }
@@ -1450,3 +2008,7 @@ struct VisualEffectBlur: NSViewRepresentable {
         nsView.blendingMode = blendingMode
     }
 }
+
+// MARK: - Backward Compatibility Aliases
+typealias AppViewModel = PopoverViewModel
+typealias MainContentView = InlinePopoverView
