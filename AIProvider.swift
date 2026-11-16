@@ -63,18 +63,18 @@ public enum AIProvider: String, CaseIterable, Identifiable {
         case .openAI:
             return "gpt-4o-mini"
         case .gemini:
-            return "gemini-3.8-flash"
+            return "gemini-2.0-flash"
         }
     }
 
     public var models: [String] {
         switch self {
         case .groq:
-            return ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
+            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         case .openAI:
             return ["gpt-4o-mini", "gpt-4o"]
         case .gemini:
-            return ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-4-argon"]
+            return ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
         }
     }
 
@@ -123,11 +123,14 @@ public enum AIProvider: String, CaseIterable, Identifiable {
                 UserDefaults.standard.set(legacySaved, forKey: key)
                 return legacySaved
             }
+            // Fallback to defaultModel if unconfigured or previously set to an invalid/stale model
+            UserDefaults.standard.set(defaultModel, forKey: key)
             return defaultModel
         }
         set {
             let key = Self.selectedModelKeyPrefix + rawValue
-            UserDefaults.standard.set(newValue, forKey: key)
+            let valueToSave = models.contains(newValue) ? newValue : defaultModel
+            UserDefaults.standard.set(valueToSave, forKey: key)
         }
     }
 
