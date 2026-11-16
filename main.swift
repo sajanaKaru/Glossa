@@ -225,6 +225,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("OpenAbout"),
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(checkForUpdates),
+            name: NSNotification.Name("CheckForUpdates"),
+            object: nil
+        )
         handleAppDidBecomeActive()
 
         // Check startup guide suppression preference
@@ -316,6 +322,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guideWindow?.makeKeyAndOrderFront(nil)
     }
 
+    @objc func checkForUpdates() {
+        if let url = URL(string: "https://github.com/sajanaKaru/LingoBar/releases/latest") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     private func updateMenuBarMenu() {
         guard let button = statusItem?.button else { return }
 
@@ -323,6 +335,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "About Glossa...", action: #selector(openAbout), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
         let translateItem = NSMenuItem(title: "Translate Selection", action: #selector(triggerFromMenu), keyEquivalent: "")
