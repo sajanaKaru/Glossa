@@ -13,6 +13,7 @@ REQUIRED_SOURCES=(
     "AIProvider.swift"
     "KeychainHelper.swift"
     "SettingsView.swift"
+    "UserGuideView.swift"
     "Info.plist"
     "Resources/AppIcon.icns"
 )
@@ -27,7 +28,7 @@ done
 echo "==> [Preflight] All required sources verified."
 
 echo "==> Building ${APP_NAME} binary with swiftc..."
-swiftc -parse-as-library main.swift AIProvider.swift KeychainHelper.swift SettingsView.swift -o "${APP_NAME}"
+swiftc -parse-as-library main.swift AIProvider.swift KeychainHelper.swift SettingsView.swift UserGuideView.swift -o "${APP_NAME}"
 
 echo "==> Assembling bundle in staging directory..."
 rm -rf ".build_staging"
