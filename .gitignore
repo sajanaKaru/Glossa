@@ -1,3 +1,7 @@
 LingoBar
 LingoBar.app
+*.dmg
+*.zip
+.build_staging
+.dmg_staging
 .DS_Store

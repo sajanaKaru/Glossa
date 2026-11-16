@@ -31,6 +31,7 @@ struct UserGuideView: View {
     @Binding var isPresented: Bool
     @State private var selectedLanguage: GuideLanguage = .english
     @AppStorage("suppressGuideOnStartup") private var suppressGuideOnStartup: Bool = false
+    @ObservedObject private var launchHelper = LaunchAtLoginHelper.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,6 +110,9 @@ struct UserGuideView: View {
                             ["⌘", ","]
                         ]
                     )
+
+                    // Feature 4: Auto-Startup on Login (Launch at Login)
+                    launchAtLoginCard()
 
                     // Quick Shortcut Cheatsheet Card
                     VStack(alignment: .leading, spacing: 8) {
@@ -259,5 +263,127 @@ struct UserGuideView: View {
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
+    }
+
+    private func launchAtLoginCard() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "macwindow.badge.plus")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.green)
+                    .frame(width: 22, height: 22)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(Circle())
+
+                Text(selectedLanguage == .english ? "4. Auto-Startup on Login (Recommended)" : "4. පරිගණකය ආරම්භයේදී ස්වයංක්‍රීයව අරඹන්න")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Toggle("", isOn: Binding(
+                    get: { launchHelper.isEnabled },
+                    set: { newVal in launchHelper.setLaunchAtLogin(newVal) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+            }
+
+            Text(selectedLanguage == .english
+                ? "LingoBar functions as a lightweight background accessory. Enabling Launch at Login ensures your global shortcuts (⌥Space and ⌥⇧R) are immediately available each time your Mac starts."
+                : "LingoBar පසුබිමේ ක්‍රියාත්මක වන යෙදුමක් බැවින්, Mac පරිගණකය ආරම්භ වන විටම ක්‍රියාත්මක වීමෙන් ⌥Space සහ ⌥⇧R කෙටිමං ඕනෑම වේලාවක භාවිතයට සූදානම්ව පවතී.")
+                .font(.system(size: 11.5))
+                .foregroundColor(.secondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Status Indicator & Actions
+            HStack(spacing: 8) {
+                if launchHelper.isEnabled {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 11))
+                        Text(selectedLanguage == .english ? "Active — Ready on startup" : "සක්‍රියයි — ආරම්භයේදීම සූදානම්")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.green)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(4)
+                } else if launchHelper.status == .requiresApproval {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.system(size: 11))
+                        Text(selectedLanguage == .english ? "Approval Required in System Settings" : "System Settings තුළින් අනුමැතිය අවශ්‍යයි")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(4)
+
+                    Button(action: {
+                        launchHelper.openSystemLoginItemsSettings()
+                    }) {
+                        Text(selectedLanguage == .english ? "Open Settings" : "සැකසුම් විවෘත කරන්න")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "circle")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 11))
+                        Text(selectedLanguage == .english ? "Disabled" : "අක්‍රියයි")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(4)
+                }
+
+                Spacer()
+
+                Button(action: {
+                    launchHelper.openSystemLoginItemsSettings()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 10))
+                        Text(selectedLanguage == .english ? "Login Items" : "Login Items විවෘත කරන්න")
+                            .font(.system(size: 10))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .help(selectedLanguage == .english ? "Open macOS System Settings > Login Items" : "macOS System Settings හි Login Items විවෘත කරන්න")
+            }
+
+            if !launchHelper.errorMessage.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 10))
+                    Text(launchHelper.errorMessage)
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+        )
     }
 }
