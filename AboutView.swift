@@ -161,7 +161,7 @@ struct AboutView: View {
     }
 
     private func checkForUpdates() {
-        if let url = URL(string: "https://github.com/sajanaKaru/LingoBar/releases/latest") {
+        if let url = URL(string: "https://github.com/sajanaKaru/Glossa/releases/latest") {
             NSWorkspace.shared.open(url)
         }
     }
