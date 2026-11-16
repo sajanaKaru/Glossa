@@ -49,26 +49,26 @@ No browser tabs. No subscription fees. No data harvesting. Your API keys are kep
 
 ## ✨ Key Features
 
-- 🇱🇰 **Natural Spoken Sinhala Translation (`⌥Space` / `⌥⇧L`)**  
+- 🇱🇰 **Natural Spoken Sinhala Translation (`⌥Space` / `⌥⇧L`)**<br />
   Produces natural, everyday spoken Sinhala (`සරල සිංහල`) rather than robotic or archaic textbook phrasing.
 
-- ✍️ **Professional Rewrite & Auto-Copy (`⌥⇧R`)**  
+- ✍️ **Professional Rewrite & Auto-Copy (`⌥⇧R`)**<br />
   Refines emails, PR reviews, Slack messages, and documentation into fluent, natural business English and instantly copies the result to your clipboard.
 
-- ⚡ **Global Carbon Hotkey Engine**  
+- ⚡ **Global Carbon Hotkey Engine**<br />
   Sub-millisecond shortcut capture with automatic registration conflict detection and menu bar fallback.
 
-- 🚀 **Auto-Startup (Launch at Login)**  
+- 🚀 **Auto-Startup (Launch at Login)**<br />
   Integrated with modern macOS `SMAppService.mainApp` — turn it on with a single toggle so Glossa is always ready when your Mac boots.
 
-- 📖 **Built-in Bilingual User Guide**  
+- 📖 **Built-in Bilingual User Guide**<br />
   Full English and Sinhala (`සිංහල`) onboarding guide with shortcut cheatsheets and configuration tips.
 
-- 🔐 **Multi-Provider AI with Keychain Isolation**  
+- 🔐 **Multi-Provider AI with Keychain Isolation**
   Seamlessly choose between:
   - **Groq** (`llama-3.3-70b-versatile` — ultra-fast sub-second latency)
   - **OpenAI** (`gpt-4o-mini`, `gpt-4o`)
-  - **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-pro`)  
+  - **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-pro`)<br />
   All credentials are saved securely in your macOS Keychain (`kSecClassGenericPassword`).
 
 ---
@@ -174,7 +174,7 @@ cd Glossa
 
 Designed and developed with ❤️ by:
 
-**Sajana Karunarathna**  
+**Sajana Karunarathna**<br />
 Connect on LinkedIn: [linkedin.com/in/sajanakaru](https://www.linkedin.com/in/sajanakaru)
 
 ---
