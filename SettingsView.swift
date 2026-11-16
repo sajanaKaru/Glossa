@@ -29,6 +29,7 @@ public struct SettingsView: View {
     @State private var selectedConflictCandidate: ConflictCandidate? = nil
     @State private var isLegacyVaultAvailable: Bool = false
     @State private var isPerformingProgrammaticClear: Bool = false
+    @ObservedObject private var launchHelper = LaunchAtLoginHelper.shared
 
     public init(isPresented: Binding<Bool>, onKeySaved: (() -> Void)? = nil) {
         self._isPresented = isPresented
@@ -269,6 +270,85 @@ public struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.red)
                         .lineLimit(2)
+                }
+            }
+
+            Divider()
+
+            // Startup & Behavior Section
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Startup & Behavior")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button(action: {
+                        NotificationCenter.default.post(name: NSNotification.Name("OpenAbout"), object: nil)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "info.circle")
+                            Text("About LingoBar...")
+                        }
+                        .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Launch at Login")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Start LingoBar automatically when Mac boots")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Status Pill
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(launchHelper.isEnabled ? Color.green : (launchHelper.status == .requiresApproval ? Color.orange : Color.secondary.opacity(0.4)))
+                            .frame(width: 7, height: 7)
+                        Text(launchHelper.isEnabled ? "Enabled" : (launchHelper.status == .requiresApproval ? "Approval Needed" : "Disabled"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(launchHelper.isEnabled ? .green : (launchHelper.status == .requiresApproval ? .orange : .secondary))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(4)
+
+                    Toggle("", isOn: Binding(
+                        get: { launchHelper.isEnabled },
+                        set: { newVal in launchHelper.setLaunchAtLogin(newVal) }
+                    ))
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                }
+
+                HStack {
+                    Button(action: {
+                        launchHelper.openSystemLoginItemsSettings()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 10))
+                            Text("Open Login Items Settings...")
+                                .font(.system(size: 10.5))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    if !launchHelper.errorMessage.isEmpty {
+                        Text(launchHelper.errorMessage)
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                            .lineLimit(1)
+                    }
                 }
             }
 

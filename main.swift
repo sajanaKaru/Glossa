@@ -164,6 +164,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModel = PopoverViewModel()
     var settingsWindow: NSWindow?
     var guideWindow: NSWindow?
+    var aboutWindow: NSWindow?
     
     private var globalKeyDownMonitor: Any?
     private var localKeyDownMonitor: Any?
@@ -218,6 +219,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("OpenUserGuide"),
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openAbout),
+            name: NSNotification.Name("OpenAbout"),
+            object: nil
+        )
         handleAppDidBecomeActive()
 
         // Check startup guide suppression preference
@@ -242,7 +249,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.viewModel.refreshApiKey()
             })
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 440, height: 480),
+                contentRect: NSRect(x: 0, y: 0, width: 440, height: 550),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -255,6 +262,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc func openAbout() {
+        if aboutWindow == nil {
+            let aboutView = AboutView(isPresented: Binding(
+                get: { [weak self] in self?.aboutWindow?.isVisible ?? false },
+                set: { [weak self] isPres in
+                    if !isPres {
+                        self?.aboutWindow?.orderOut(nil)
+                    }
+                }
+            ))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 380),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "About LingoBar"
+            window.center()
+            window.contentView = NSHostingView(rootView: aboutView)
+            window.isReleasedWhenClosed = false
+            self.aboutWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        aboutWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc func openUserGuide() {
@@ -289,6 +322,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = ""
 
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "About LingoBar...", action: #selector(openAbout), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+
         let translateItem = NSMenuItem(title: "Translate Selection", action: #selector(triggerFromMenu), keyEquivalent: "")
         let rewriteItem = NSMenuItem(title: "✨ Rewrite Selection", action: #selector(triggerRewriteFromMenu), keyEquivalent: "")
 
@@ -1742,6 +1778,19 @@ struct InlinePopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Settings (⌘,)")
+
+                Button(action: {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenAbout"), object: nil)
+                }) {
+                    Image(systemName: "info")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .padding(3)
+                        .background(Color.secondary.opacity(0.12))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("About LingoBar")
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
