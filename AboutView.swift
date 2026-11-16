@@ -32,7 +32,7 @@ struct AboutView: View {
 
                 // Title & Version
                 VStack(spacing: 4) {
-                    Text("LingoBar")
+                    Text("Glossa")
                         .font(.system(size: 22, weight: .bold))
                         .foregroundColor(.primary)
 
@@ -42,7 +42,7 @@ struct AboutView: View {
                 }
 
                 // Tagline
-                Text("Instant English-to-Sinhala translation & professional grammar polish for macOS")
+                Text("Glossa — Instant English-to-Sinhala translation & professional grammar polish for macOS")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)

@@ -7,8 +7,10 @@ public enum AIProvider: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
-    public static let userDefaultsKey = "com.lingobar.macos.selectedProvider"
-    public static let selectedModelKeyPrefix = "com.lingobar.macos.selectedModel."
+    public static let userDefaultsKey = "com.glossa.macos.selectedProvider"
+    public static let legacyUserDefaultsKey = "com.lingobar.macos.selectedProvider"
+    public static let selectedModelKeyPrefix = "com.glossa.macos.selectedModel."
+    public static let legacySelectedModelKeyPrefix = "com.lingobar.macos.selectedModel."
 
     public var displayName: String {
         switch self {
@@ -115,6 +117,12 @@ public enum AIProvider: String, CaseIterable, Identifiable {
             if let saved = UserDefaults.standard.string(forKey: key), models.contains(saved) {
                 return saved
             }
+            // Fallback to legacy key and auto-migrate
+            let legacyKey = Self.legacySelectedModelKeyPrefix + rawValue
+            if let legacySaved = UserDefaults.standard.string(forKey: legacyKey), models.contains(legacySaved) {
+                UserDefaults.standard.set(legacySaved, forKey: key)
+                return legacySaved
+            }
             return defaultModel
         }
         set {
@@ -127,6 +135,12 @@ public enum AIProvider: String, CaseIterable, Identifiable {
         get {
             if let saved = UserDefaults.standard.string(forKey: userDefaultsKey),
                let provider = AIProvider(rawValue: saved) {
+                return provider
+            }
+            // Fallback to legacy key and auto-migrate
+            if let legacySaved = UserDefaults.standard.string(forKey: legacyUserDefaultsKey),
+               let provider = AIProvider(rawValue: legacySaved) {
+                UserDefaults.standard.set(legacySaved, forKey: userDefaultsKey)
                 return provider
             }
             return .groq

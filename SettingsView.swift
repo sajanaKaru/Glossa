@@ -286,7 +286,7 @@ public struct SettingsView: View {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "info.circle")
-                            Text("About LingoBar...")
+                            Text("About Glossa...")
                         }
                         .font(.caption)
                     }
@@ -298,7 +298,7 @@ public struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Launch at Login")
                             .font(.system(size: 12, weight: .medium))
-                        Text("Start LingoBar automatically when Mac boots")
+                        Text("Start Glossa automatically when Mac boots")
                             .font(.system(size: 10.5))
                             .foregroundColor(.secondary)
                     }
@@ -699,6 +699,7 @@ public struct SettingsView: View {
             selectedProvider.selectedModel = selectedModel
             AIProvider.current = selectedProvider
             if selectedProvider == .groq {
+                UserDefaults.standard.set(true, forKey: "com.glossa.macos.hasMigratedVaultV2")
                 UserDefaults.standard.set(true, forKey: "com.lingobar.macos.hasMigratedVaultV2")
                 isLegacyVaultAvailable = false
             }

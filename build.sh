@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="LingoBar"
+APP_NAME="Glossa"
 APP_BUNDLE="${APP_NAME}.app"
 STAGING_DIR=".build_staging/${APP_BUNDLE}"
 STAGING_CONTENTS="${STAGING_DIR}/Contents"
@@ -29,6 +29,9 @@ for src in "${REQUIRED_SOURCES[@]}"; do
 done
 echo "==> [Preflight] All required sources verified."
 
+# Clean up legacy LingoBar binaries if present
+rm -rf "LingoBar" "LingoBar.app"
+
 echo "==> Building ${APP_NAME} binary with swiftc..."
 swiftc -parse-as-library main.swift AIProvider.swift KeychainHelper.swift SettingsView.swift UserGuideView.swift LaunchAtLoginHelper.swift AboutView.swift -o "${APP_NAME}"
 
@@ -47,7 +50,7 @@ if [ ! -f "${STAGING_MACOS}/${APP_NAME}" ] || [ ! -f "${STAGING_CONTENTS}/Info.p
 fi
 
 echo "==> Signing staged bundle with designated requirement..."
-codesign --force --deep -s - -i "com.lingobar.macos" --requirements '=designated => identifier "com.lingobar.macos"' "${STAGING_DIR}"
+codesign --force --deep -s - -i "com.glossa.macos" --requirements '=designated => identifier "com.glossa.macos"' "${STAGING_DIR}"
 
 echo "==> Verifying signature on staged bundle before promotion..."
 codesign --verify --deep --strict "${STAGING_DIR}"

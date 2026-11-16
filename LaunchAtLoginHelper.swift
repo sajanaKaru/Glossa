@@ -34,7 +34,7 @@ final class LaunchAtLoginHelper: ObservableObject {
                 errorMessage = ""
             } catch {
                 errorMessage = error.localizedDescription
-                NSLog("[LingoBar] SMAppService registration failed: %@", error.localizedDescription)
+                NSLog("[Glossa] SMAppService registration failed: %@", error.localizedDescription)
             }
             refreshStatus()
         }

@@ -4,44 +4,132 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-APP_NAME="LingoBar"
+APP_NAME="Glossa"
 APP_BUNDLE="${APP_NAME}.app"
+DMG_VOLUME_NAME="${APP_NAME}"
 DMG_NAME="${APP_NAME}-Installer.dmg"
 ZIP_NAME="${APP_NAME}-macOS.zip"
-DMG_STAGING=".dmg_staging"
+TEMP_DMG=".${APP_NAME}-temp.dmg"
+MOUNT_DIR="/Volumes/${DMG_VOLUME_NAME}"
+BG_IMAGE="Resources/installer_background.png"
 
 echo "==> [Package] Ensuring fresh build of ${APP_BUNDLE}..."
 ./build.sh
 
-echo "==> [Package] Preparing DMG staging environment..."
-rm -rf "${DMG_STAGING}" "${DMG_NAME}" "${ZIP_NAME}"
-mkdir -p "${DMG_STAGING}"
+if [ ! -d "${APP_BUNDLE}" ]; then
+    echo "ERROR: ${APP_BUNDLE} not found!" >&2
+    exit 1
+fi
 
-echo "==> [Package] Copying ${APP_BUNDLE} to staging..."
-cp -R "${APP_BUNDLE}" "${DMG_STAGING}/"
+if [ ! -f "${BG_IMAGE}" ]; then
+    echo "ERROR: Background image '${BG_IMAGE}' not found!" >&2
+    exit 1
+fi
 
-echo "==> [Package] Creating /Applications symlink for drag-and-drop installation..."
-ln -s /Applications "${DMG_STAGING}/Applications"
+echo "==> [Package] Cleaning up existing packaging artifacts..."
+rm -f "${DMG_NAME}" "${ZIP_NAME}" "${TEMP_DMG}"
 
-echo "==> [Package] Building compressed DMG installer (${DMG_NAME})..."
-hdiutil create -volname "${APP_NAME}" -srcfolder "${DMG_STAGING}" -ov -format UDZO "${DMG_NAME}"
+# Ensure no stale volume is mounted
+if [ -d "${MOUNT_DIR}" ]; then
+    echo "==> Unmounting stale volume at ${MOUNT_DIR}..."
+    hdiutil detach "${MOUNT_DIR}" -force || true
+    sleep 1
+fi
 
-echo "==> [Package] Building portable ZIP archive (${ZIP_NAME})..."
+cleanup() {
+    local sig="${1:-0}"
+    echo "==> [Package Cleanup] Cleaning temporary resources (signal: ${sig})..."
+    if [ -d "${MOUNT_DIR}" ]; then
+        hdiutil detach "${MOUNT_DIR}" -force 2>/dev/null || true
+    fi
+    rm -f "${TEMP_DMG}"
+    if [ "${sig}" -ne 0 ]; then
+        exit 1
+    fi
+}
+
+trap 'cleanup 1' HUP
+trap 'cleanup 2' INT
+trap 'cleanup 15' TERM
+
+echo "==> [Package] Creating temporary read-write DMG volume..."
+hdiutil create -size 40m -fs HFS+ -volname "${DMG_VOLUME_NAME}" "${TEMP_DMG}"
+
+echo "==> [Package] Mounting temporary DMG..."
+hdiutil attach "${TEMP_DMG}" -noautoopen -mountpoint "${MOUNT_DIR}"
+
+echo "==> [Package] Copying ${APP_BUNDLE} and creating Applications symlink..."
+cp -R "${APP_BUNDLE}" "${MOUNT_DIR}/"
+ln -s /Applications "${MOUNT_DIR}/Applications"
+
+echo "==> [Package] Injecting installer background image..."
+mkdir -p "${MOUNT_DIR}/.background"
+cp -f "${BG_IMAGE}" "${MOUNT_DIR}/.background/background.png"
+
+echo "==> [Package] Configuring Finder window layout via AppleScript..."
+osascript <<EOF || true
+tell application "Finder"
+    tell disk "${DMG_VOLUME_NAME}"
+        open
+        delay 1
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {400, 200, 1000, 600}
+        set viewOptions to the icon view options of container window
+        set arrangement of viewOptions to not arranged
+        set icon size of viewOptions to 128
+        try
+            set background picture of viewOptions to file ".background:background.png"
+        end try
+        set position of item "${APP_BUNDLE}" of container window to {160, 210}
+        set position of item "Applications" of container window to {440, 210}
+        update without registering applications
+        delay 2
+        close
+    end tell
+end tell
+EOF
+
+echo "==> [Package] Finalizing disk volume..."
+sync
+
+echo "==> [Package] Detaching temporary DMG volume..."
+detached=0
+for i in {1..5}; do
+    if hdiutil detach "${MOUNT_DIR}" 2>/dev/null; then
+        detached=1
+        break
+    fi
+    echo "Waiting for disk to be released (attempt $i/5)..."
+    sleep 2
+done
+
+if [ "$detached" -eq 0 ]; then
+    echo "Force detaching volume ${MOUNT_DIR}..."
+    hdiutil detach "${MOUNT_DIR}" -force
+fi
+
+echo "==> [Package] Converting to compressed release DMG (${DMG_NAME})..."
+hdiutil convert "${TEMP_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_NAME}"
+rm -f "${TEMP_DMG}"
+
+echo "==> [Package] Building portable ZIP distribution package (${ZIP_NAME})..."
 ditto -c -k --keepParent "${APP_BUNDLE}" "${ZIP_NAME}"
 
-echo "==> [Package] Cleaning up staging directory..."
-rm -rf "${DMG_STAGING}"
+# Disarm signal traps
+trap - HUP INT TERM
 
-echo "==> [Package] Verifying distribution packages..."
+echo "==> [Package] Verifying generated distribution packages..."
 if [ ! -s "${DMG_NAME}" ]; then
-    echo "ERROR: DMG creation failed or file is empty!" >&2
+    echo "ERROR: DMG package '${DMG_NAME}' is missing or empty!" >&2
     exit 1
 fi
 
 if [ ! -s "${ZIP_NAME}" ]; then
-    echo "ERROR: ZIP creation failed or file is empty!" >&2
+    echo "ERROR: ZIP package '${ZIP_NAME}' is missing or empty!" >&2
     exit 1
 fi
 
-echo "==> [Package] Successfully generated distribution packages:"
+echo "==> [Package] Distribution packages successfully created:"
 ls -lh "${DMG_NAME}" "${ZIP_NAME}"

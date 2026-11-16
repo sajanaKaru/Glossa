@@ -6,7 +6,7 @@ import Combine
 
 // MARK: - App Entry Point
 @main
-struct LingoBarApp: App {
+struct GlossaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -56,44 +56,44 @@ final class GlobalHotKeyManager {
 
         let installStatus = InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, &eventHandler)
         guard installStatus == noErr else {
-            NSLog("[LingoBar] InstallEventHandler failed with status: %d", installStatus)
+            NSLog("[Glossa] InstallEventHandler failed with status: %d", installStatus)
             hasRegistrationConflict = true
             return false
         }
 
         // 1. Option + Space (kVK_Space = 49, optionKey = 0x0800)
-        let spaceID = EventHotKeyID(signature: OSType(0x4C4E4742), id: 1) // 'LNGB', 1
+        let spaceID = EventHotKeyID(signature: OSType(0x474C5353), id: 1) // 'GLSS', 1
         var spaceRef: EventHotKeyRef?
         let spaceStatus = RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey), spaceID, GetApplicationEventTarget(), 0, &spaceRef)
         if spaceStatus == noErr, let r = spaceRef {
             hotKeyRefs.append(r)
-            NSLog("[LingoBar] Successfully registered Carbon Global HotKey: Option+Space")
+            NSLog("[Glossa] Successfully registered Carbon Global HotKey: Option+Space")
         } else {
-            NSLog("[LingoBar] Failed to register Carbon Global HotKey Option+Space with status: %d", spaceStatus)
+            NSLog("[Glossa] Failed to register Carbon Global HotKey Option+Space with status: %d", spaceStatus)
             hasRegistrationConflict = true
         }
 
         // 2. Option + Shift + L (kVK_ANSI_L = 37, optionKey | shiftKey)
-        let lID = EventHotKeyID(signature: OSType(0x4C4E4742), id: 2) // 'LNGB', 2
+        let lID = EventHotKeyID(signature: OSType(0x474C5353), id: 2) // 'GLSS', 2
         var lRef: EventHotKeyRef?
         let lStatus = RegisterEventHotKey(UInt32(kVK_ANSI_L), UInt32(optionKey | shiftKey), lID, GetApplicationEventTarget(), 0, &lRef)
         if lStatus == noErr, let r = lRef {
             hotKeyRefs.append(r)
-            NSLog("[LingoBar] Successfully registered Carbon Global HotKey: Option+Shift+L")
+            NSLog("[Glossa] Successfully registered Carbon Global HotKey: Option+Shift+L")
         } else {
-            NSLog("[LingoBar] Failed to register Carbon Global HotKey Option+Shift+L with status: %d", lStatus)
+            NSLog("[Glossa] Failed to register Carbon Global HotKey Option+Shift+L with status: %d", lStatus)
             hasRegistrationConflict = true
         }
 
         // 3. Option + Shift + R (kVK_ANSI_R = 15, optionKey | shiftKey)
-        let rID = EventHotKeyID(signature: OSType(0x4C4E4742), id: 3) // 'LNGB', 3
+        let rID = EventHotKeyID(signature: OSType(0x474C5353), id: 3) // 'GLSS', 3
         var rRef: EventHotKeyRef?
         let rStatus = RegisterEventHotKey(UInt32(kVK_ANSI_R), UInt32(optionKey | shiftKey), rID, GetApplicationEventTarget(), 0, &rRef)
         if rStatus == noErr, let r = rRef {
             hotKeyRefs.append(r)
-            NSLog("[LingoBar] Successfully registered Carbon Global HotKey: Option+Shift+R")
+            NSLog("[Glossa] Successfully registered Carbon Global HotKey: Option+Shift+R")
         } else {
-            NSLog("[LingoBar] Failed to register Carbon Global HotKey Option+Shift+R with status: %d", rStatus)
+            NSLog("[Glossa] Failed to register Carbon Global HotKey Option+Shift+R with status: %d", rStatus)
             hasRegistrationConflict = true
         }
 
@@ -254,7 +254,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "LingoBar Settings"
+            window.title = "Glossa Settings"
             window.center()
             window.contentView = NSHostingView(rootView: settingsView)
             window.isReleasedWhenClosed = false
@@ -280,7 +280,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "About LingoBar"
+            window.title = "About Glossa"
             window.center()
             window.contentView = NSHostingView(rootView: aboutView)
             window.isReleasedWhenClosed = false
@@ -306,7 +306,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "LingoBar - User Guide / භාවිත උපදෙස්"
+            window.title = "Glossa - User Guide / භාවිත උපදෙස්"
             window.center()
             window.contentView = NSHostingView(rootView: guideView)
             window.isReleasedWhenClosed = false
@@ -322,17 +322,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = ""
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "About LingoBar...", action: #selector(openAbout), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "About Glossa...", action: #selector(openAbout), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
         let translateItem = NSMenuItem(title: "Translate Selection", action: #selector(triggerFromMenu), keyEquivalent: "")
         let rewriteItem = NSMenuItem(title: "✨ Rewrite Selection", action: #selector(triggerRewriteFromMenu), keyEquivalent: "")
 
         if !viewModel.hotKeyConflictMessage.isEmpty {
-            let conflictIcon = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: "LingoBar - Shortcut Conflict: Click to Translate")
+            let conflictIcon = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: "Glossa - Shortcut Conflict: Click to Translate")
             conflictIcon?.isTemplate = true
             button.image = conflictIcon
-            button.toolTip = "LingoBar - Shortcut Conflict: Click to Translate"
+            button.toolTip = "Glossa - Shortcut Conflict: Click to Translate"
 
             let conflictItem = NSMenuItem(title: "⚠️ Shortcut Conflict: Use Menu to Translate", action: nil, keyEquivalent: "")
             conflictItem.isEnabled = false
@@ -344,10 +344,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             rewriteItem.keyEquivalent = ""
             rewriteItem.keyEquivalentModifierMask = []
         } else {
-            let normalIcon = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "LingoBar")
+            let normalIcon = NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "Glossa")
             normalIcon?.isTemplate = true
             button.image = normalIcon
-            button.toolTip = "LingoBar - Option+Space"
+            button.toolTip = "Glossa - Option+Space"
 
             translateItem.keyEquivalent = " "
             translateItem.keyEquivalentModifierMask = [.option]
@@ -358,10 +358,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(translateItem)
         menu.addItem(rewriteItem)
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "📖 User Guide (භාවිත උපදෙස්)...", action: #selector(openUserGuide), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "📖 Glossa User Guide (භාවිත උපදෙස්)...", action: #selector(openUserGuide), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Glossa Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit LingoBar", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Glossa", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem?.menu = menu
     }
 
@@ -429,7 +429,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // 3. Local Monitor for events when LingoBar is foregrounded
+        // 3. Local Monitor for events when Glossa is foregrounded
         localKeyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             guard let self = self, self.panel.isVisible else { return event }
             if event.keyCode == 53 { // Esc key
@@ -1740,7 +1740,7 @@ struct InlinePopoverView: View {
                     Image(systemName: "character.book.closed.fill")
                         .foregroundColor(.blue)
                         .font(.system(size: 11))
-                    Text("LingoBar")
+                    Text("Glossa")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.primary.opacity(0.85))
                 }
@@ -1790,7 +1790,7 @@ struct InlinePopoverView: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help("About LingoBar")
+                .help("About Glossa")
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
