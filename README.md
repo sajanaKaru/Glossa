@@ -68,7 +68,7 @@ No browser tabs. No subscription fees. No data harvesting. Your API keys are kep
   Seamlessly choose between:
   - **Groq** (`llama-3.3-70b-versatile` — ultra-fast sub-second latency)
   - **OpenAI** (`gpt-4o-mini`, `gpt-4o`)
-  - **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-pro`)<br />
+  - **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`)<br />
   All credentials are saved securely in your macOS Keychain (`kSecClassGenericPassword`).
 
 ---

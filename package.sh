@@ -67,7 +67,7 @@ mkdir -p "${MOUNT_DIR}/.background"
 cp -f "${BG_IMAGE}" "${MOUNT_DIR}/.background/background.png"
 
 echo "==> [Package] Configuring Finder window layout via AppleScript..."
-osascript <<EOF || true
+osascript <<EOF
 tell application "Finder"
     tell disk "${DMG_VOLUME_NAME}"
         open
@@ -79,9 +79,7 @@ tell application "Finder"
         set viewOptions to the icon view options of container window
         set arrangement of viewOptions to not arranged
         set icon size of viewOptions to 112
-        try
-            set background picture of viewOptions to file "background.png" of folder ".background" of disk "${DMG_VOLUME_NAME}"
-        end try
+        set background picture of viewOptions to (POSIX file "${MOUNT_DIR}/.background/background.png") as alias
         set position of item "${APP_BUNDLE}" of container window to {160, 205}
         set position of item "Applications" of container window to {440, 205}
         update without registering applications
@@ -109,6 +107,8 @@ if [ "$detached" -eq 0 ]; then
     echo "Force detaching volume ${MOUNT_DIR}..."
     hdiutil detach "${MOUNT_DIR}" -force
 fi
+
+sync
 
 echo "==> [Package] Converting to compressed release DMG (${DMG_NAME})..."
 hdiutil convert "${TEMP_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_NAME}"

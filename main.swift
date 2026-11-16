@@ -287,13 +287,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
             window.title = "About Glossa"
+            window.level = .floating
             window.center()
             window.contentView = NSHostingView(rootView: aboutView)
             window.isReleasedWhenClosed = false
             self.aboutWindow = window
+        } else {
+            aboutWindow?.level = .floating
         }
         NSApp.activate(ignoringOtherApps: true)
+        aboutWindow?.center()
         aboutWindow?.makeKeyAndOrderFront(nil)
+        aboutWindow?.orderFrontRegardless()
     }
 
     @objc func openUserGuide() {
@@ -313,13 +318,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
             window.title = "Glossa - User Guide / භාවිත උපදෙස්"
+            window.level = .floating
             window.center()
             window.contentView = NSHostingView(rootView: guideView)
             window.isReleasedWhenClosed = false
             self.guideWindow = window
+        } else {
+            guideWindow?.level = .floating
         }
         NSApp.activate(ignoringOtherApps: true)
+        guideWindow?.center()
         guideWindow?.makeKeyAndOrderFront(nil)
+        guideWindow?.orderFrontRegardless()
     }
 
     @objc func checkForUpdates() {
