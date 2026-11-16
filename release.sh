@@ -7,7 +7,7 @@ cd "${SCRIPT_DIR}"
 TAG="v1.1.0"
 TITLE="Glossa v1.1.0 — Native macOS Translation & Grammar Polisher"
 NOTES_FILE="RELEASE_NOTES.md"
-REPO="sajanaKaru/LingoBar"
+REPO="sajanaKaru/Glossa"
 
 echo "=========================================================="
 echo " Starting Glossa Official Release: ${TAG}"

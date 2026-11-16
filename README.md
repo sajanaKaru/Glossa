@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sajanaKaru/LingoBar/releases/latest">
-    <img src="https://img.shields.io/github/v/release/sajanaKaru/LingoBar?style=flat-square&color=007AFF&label=Release" alt="Latest Release" />
+  <a href="https://github.com/sajanaKaru/Glossa/releases/latest">
+    <img src="https://img.shields.io/github/v/release/sajanaKaru/Glossa?style=flat-square&color=007AFF&label=Release" alt="Latest Release" />
   </a>
   <img src="https://img.shields.io/badge/macOS-13.0%2B-blue?style=flat-square&logo=apple&logoColor=white" alt="macOS 13.0+" />
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6.0" />
@@ -24,11 +24,11 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/sajanaKaru/LingoBar/releases/latest/download/Glossa-Installer.dmg">
+  <a href="https://github.com/sajanaKaru/Glossa/releases/latest/download/Glossa-Installer.dmg">
     <img src="https://img.shields.io/badge/⬇️%20Download-Glossa_Installer.dmg-007AFF?style=for-the-badge&logo=apple&logoColor=white" alt="Download Glossa for macOS" />
   </a>
   &nbsp;&nbsp;
-  <a href="https://github.com/sajanaKaru/LingoBar/releases/latest/download/Glossa-macOS.zip">
+  <a href="https://github.com/sajanaKaru/Glossa/releases/latest/download/Glossa-macOS.zip">
     <img src="https://img.shields.io/badge/📦%20Download-Portable_ZIP-5856D6?style=for-the-badge&logo=apple&logoColor=white" alt="Download Portable ZIP" />
   </a>
 </p>
@@ -90,13 +90,13 @@ No browser tabs. No subscription fees. No data harvesting. Your API keys are kep
 ## 📦 Installation
 
 ### Option 1: Drag-and-Drop Installer (Recommended)
-1. Download **[`Glossa-Installer.dmg`](https://github.com/sajanaKaru/LingoBar/releases/latest/download/Glossa-Installer.dmg)**.
+1. Download **[`Glossa-Installer.dmg`](https://github.com/sajanaKaru/Glossa/releases/latest/download/Glossa-Installer.dmg)**.
 2. Double-click the downloaded `.dmg` file to mount the custom installer window.
 3. Drag the **Glossa** icon into the **Applications** folder shortcut.
 4. Eject the disk image and launch **Glossa** from Applications or Spotlight (<kbd>⌘ Space</kbd>).
 
 ### Option 2: Portable ZIP Archive
-1. Download **[`Glossa-macOS.zip`](https://github.com/sajanaKaru/LingoBar/releases/latest/download/Glossa-macOS.zip)**.
+1. Download **[`Glossa-macOS.zip`](https://github.com/sajanaKaru/Glossa/releases/latest/download/Glossa-macOS.zip)**.
 2. Unzip the archive and move `Glossa.app` into `/Applications`.
 
 ---
@@ -143,7 +143,7 @@ Glossa includes built-in update checks:
 - Click the Glossa menu bar icon → **Check for Updates...**
 - Or open **About Glossa** and click **Updates**.
 
-Both direct you to the [latest GitHub Releases page](https://github.com/sajanaKaru/LingoBar/releases/latest) where new installer packages and release notes are posted.
+Both direct you to the [latest GitHub Releases page](https://github.com/sajanaKaru/Glossa/releases/latest) where new installer packages and release notes are posted.
 
 ---
 
@@ -153,7 +153,7 @@ To compile Glossa locally on macOS:
 
 ```bash
 # Clone the repository
-git clone https://github.com/sajanaKaru/LingoBar.git Glossa
+git clone https://github.com/sajanaKaru/Glossa.git Glossa
 cd Glossa
 
 # Build Glossa.app
