@@ -70,11 +70,11 @@ public enum AIProvider: String, CaseIterable, Identifiable {
     public var models: [String] {
         switch self {
         case .groq:
-            return ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
+            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         case .openAI:
             return ["gpt-4o-mini", "gpt-4o"]
         case .gemini:
-            return ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+            return ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
         }
     }
 
