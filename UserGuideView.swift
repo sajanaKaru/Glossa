@@ -70,11 +70,14 @@ struct UserGuideView: View {
             // Content Area
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: 14) {
-                    // Feature 1: Instant Translation
+                    // Feature 1: Connect API Key (Top Card / Step 1)
+                    apiKeySetupCard()
+
+                    // Feature 2: Instant Translation
                     guideCard(
                         icon: "character.bubble.fill",
                         iconColor: .blue,
-                        title: selectedLanguage == .english ? "1. Instant Translation to Sinhala" : "1. සරල සිංහල පරිවර්තනය",
+                        title: selectedLanguage == .english ? "2. Instant Translation to Sinhala" : "2. සරල සිංහල පරිවර්තනය",
                         description: selectedLanguage == .english
                             ? "Highlight any English text in any app (browser, document, chat) and press Option+Space or Option+Shift+L. Glossa appears instantly with natural, everyday spoken Sinhala (සරල සිංහල)."
                             : "ඕනෑම මෘදුකාංගයක ඇති ඉංග්‍රීසි පාඨයක් තෝරා (highlight කර) Option+Space හෝ Option+Shift+L ඔබන්න. Glossa මඟින් එදිනෙදා ව්‍යවහාරික සරල සිංහල අර්ථය ක්ෂණිකව දිස්වනු ඇත.",
@@ -84,11 +87,11 @@ struct UserGuideView: View {
                         ]
                     )
 
-                    // Feature 2: Professional Rewrite & Grammar Polish
+                    // Feature 3: Professional Rewrite & Grammar Polish
                     guideCard(
                         icon: "sparkles",
                         iconColor: .purple,
-                        title: selectedLanguage == .english ? "2. Professional Rewrite & Auto-Copy" : "2. වෘත්තීය ඉංග්‍රීසි සංස්කරණය සහ පිටපත් කිරීම",
+                        title: selectedLanguage == .english ? "3. Professional Rewrite & Auto-Copy" : "3. වෘත්තීය ඉංග්‍රීසි සංස්කරණය සහ පිටපත් කිරීම",
                         description: selectedLanguage == .english
                             ? "Draft an email, PR, or Slack message and press Option+Shift+R (or click 'Make Professional'). Glossa fixes all grammatical errors, refines workplace tone, and automatically copies the polished sentence to your clipboard."
                             : "ඔබ ලියූ ඉංග්‍රීසි වාක්‍යයක් තෝරා Option+Shift+R ඔබන්න. Glossa මඟින් ව්‍යාකරණ දෝෂ නිවැරදි කර, පැහැදිලි වෘත්තීය මට්ටමේ වාක්‍යයක් සකසා ක්ෂණිකව Clipboard එකට Copy කර දෙනු ඇත.",
@@ -98,11 +101,11 @@ struct UserGuideView: View {
                         ]
                     )
 
-                    // Feature 3: Status Bar Menu & Settings
+                    // Feature 4: Status Bar Menu & Shortcuts
                     guideCard(
                         icon: "menubar.rectangle",
                         iconColor: .orange,
-                        title: selectedLanguage == .english ? "3. Menu Bar Actions & Settings" : "3. මෙනු බාර් පහසුකම් සහ සැකසුම්",
+                        title: selectedLanguage == .english ? "4. Menu Bar Actions & Shortcuts" : "4. මෙනු බාර් පහසුකම් සහ කෙටිමං",
                         description: selectedLanguage == .english
                             ? "Click the Glossa menu bar icon to trigger Translate or Rewrite on demand, open this User Guide, or access Settings to configure your API keys (Groq, OpenAI, or Gemini) securely in macOS Keychain."
                             : "මෙනු බාර් හි ඇති Glossa අයිකනය මඟින් පරිවර්තන, සංස්කරණ, මෙම උපදෙස් පත්‍රිකාව හෝ Settings වෙත පිවිසිය හැක. Groq, OpenAI සහ Gemini සේවාවන් Keychain මඟින් සුරක්ෂිතව භාවිතා කරන්න.",
@@ -111,7 +114,7 @@ struct UserGuideView: View {
                         ]
                     )
 
-                    // Feature 4: Auto-Startup on Login (Launch at Login)
+                    // Auto-Startup on Login (Launch at Login)
                     launchAtLoginCard()
 
                     // Quick Shortcut Cheatsheet Card
@@ -136,6 +139,12 @@ struct UserGuideView: View {
                             keys: ["⌥", "Return"],
                             altKeys: nil,
                             label: selectedLanguage == .english ? "Make Professional & Copy (inside HUD)" : "HUD එක තුළින් සංස්කරණය කර Copy කිරීම"
+                        )
+
+                        shortcutRow(
+                            keys: ["⌘", ","],
+                            altKeys: nil,
+                            label: selectedLanguage == .english ? "Open Glossa Settings (API Keys)" : "Glossa සැකසුම් (API Keys) විවෘත කිරීම"
                         )
 
                         shortcutRow(
@@ -265,6 +274,92 @@ struct UserGuideView: View {
         }
     }
 
+    private func apiKeySetupCard() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.green)
+                    .frame(width: 22, height: 22)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(Circle())
+
+                Text(selectedLanguage == .english ? "1. Connect Your Free AI API Key" : "1. නොමිලේ AI API Key එකක් සම්බන්ධ කරන්න")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                HStack(spacing: 2) {
+                    KeyBadgeView(key: "⌘")
+                    KeyBadgeView(key: ",")
+                }
+            }
+
+            Text(selectedLanguage == .english
+                ? "Glossa is 100% free, private, and serverless. Connect your own API key from Google AI Studio (Gemini - completely free, no credit card required), Groq, or OpenAI. Your key is stored securely in macOS Keychain."
+                : "Glossa සම්පූර්ණයෙන්ම නොමිලේ සහ පෞද්ගලිකව ක්‍රියාත්මක වේ. Google AI Studio (Gemini - ක්‍රෙඩිට් කාඩ්පත් අවශ්‍ය නොවන නොමිලේ Key එකක්) හෝ Groq Console වෙතින් API Key එකක් ලබාගෙන Glossa වෙත සම්බන්ධ කරන්න. ඔබගේ Key එක macOS Keychain මඟින් සුරක්ෂිතව තබා ගැනේ.")
+                .font(.system(size: 11.5))
+                .foregroundColor(.secondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Buttons row
+            HStack(spacing: 8) {
+                Button(action: {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenSettings"), object: nil)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 11))
+                        Text(selectedLanguage == .english ? "Open Settings" : "සැකසුම් විවෘත කරන්න")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button(action: {
+                    if let url = URL(string: "https://aistudio.google.com/app/apikey") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Text("Google AI Studio (Gemini)")
+                            .font(.system(size: 11))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 9))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button(action: {
+                    if let url = URL(string: "https://console.groq.com/keys") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Text("Groq Console")
+                            .font(.system(size: 11))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 9))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+        )
+    }
+
     private func launchAtLoginCard() -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
@@ -275,7 +370,7 @@ struct UserGuideView: View {
                     .background(Color.green.opacity(0.12))
                     .clipShape(Circle())
 
-                Text(selectedLanguage == .english ? "4. Auto-Startup on Login (Recommended)" : "4. පරිගණකය ආරම්භයේදී ස්වයංක්‍රීයව අරඹන්න")
+                Text(selectedLanguage == .english ? "Auto-Startup on Login (Recommended)" : "පරිගණකය ආරම්භයේදී ස්වයංක්‍රීයව අරඹන්න")
                     .font(.system(size: 12.5, weight: .bold))
                     .foregroundColor(.primary)
 
