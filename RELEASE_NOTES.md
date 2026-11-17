@@ -11,6 +11,7 @@ We are excited to announce the official release of **Glossa v1.2.0**, introducin
 - **Two-Tier Replacement Architecture**:
   - **Tier 1 (Accessibility API)**: Direct attribute write via `kAXSelectedTextAttribute` for instant zero-clipboard mutation in native AppKit editors.
   - **Tier 2 (Synthetic Cmd+V Fallback)**: Automated synthetic paste fallback with clipboard backup for WebKit, Chromium, and Electron applications.
+- **Read-Only Target Detection & Dialog Box Fallback**: When polishing on uneditable surfaces (e.g. Preview PDFs, static text labels, read-only documents) with auto-replace enabled, Glossa detects the non-editable target and falls back to the standard popover dialog with automatic clipboard copy ("✓ Copied to Clipboard!"), ensuring zero disruptive mutation attempts while preserving full rewrite visibility.
 - **Settings Toggle & Accessibility Status (`SettingsView`)**: New "English Polish Behavior" configuration panel featuring the "Auto-replace selected text on Polish" toggle, real-time Accessibility permission badge, and deep link to macOS Privacy & Security settings.
 - **Tactile Haptic Feedback**: Subtle physical haptic confirmation (`.alignment`) upon successful text replacement.
 - **Transient Error & Cancellation HUD**: Pressing `Esc` immediately cancels the in-flight rewrite and dismisses the overlay. API errors display a transient floating HUD anchored near the selection without cluttering your workspace.
