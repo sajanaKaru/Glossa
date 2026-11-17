@@ -16,6 +16,8 @@ REQUIRED_SOURCES=(
     "UserGuideView.swift"
     "LaunchAtLoginHelper.swift"
     "AboutView.swift"
+    "InPlaceTextReplacer.swift"
+    "SelectionOverlayController.swift"
     "Info.plist"
     "Resources/AppIcon.icns"
 )
@@ -33,7 +35,7 @@ echo "==> [Preflight] All required sources verified."
 rm -rf "LingoBar" "LingoBar.app"
 
 echo "==> Building ${APP_NAME} binary with swiftc..."
-swiftc -parse-as-library main.swift AIProvider.swift KeychainHelper.swift SettingsView.swift UserGuideView.swift LaunchAtLoginHelper.swift AboutView.swift -o "${APP_NAME}"
+swiftc -parse-as-library main.swift AIProvider.swift KeychainHelper.swift SettingsView.swift UserGuideView.swift LaunchAtLoginHelper.swift AboutView.swift InPlaceTextReplacer.swift SelectionOverlayController.swift -o "${APP_NAME}"
 
 echo "==> Assembling bundle in staging directory..."
 rm -rf ".build_staging"

@@ -174,6 +174,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var currentAnchorRect: NSRect?
 
+    // Headless Polish & Selection Replacement state
+    var isHeadlessPolishActive: Bool = false
+    var headlessTargetElement: AXUIElement?
+    var headlessTargetBounds: NSRect?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let popoverView = InlinePopoverView(
             vm: viewModel,
@@ -255,7 +260,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.viewModel.refreshApiKey()
             })
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 440, height: 550),
+                contentRect: NSRect(x: 0, y: 0, width: 440, height: 630),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -441,9 +446,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     self?.triggerInstantAction(mode: .rewrite)
                 }
-            } else if event.keyCode == 53 && (self?.panel.isVisible == true) { // Esc key
+            } else if event.keyCode == 53 { // Esc key
                 DispatchQueue.main.async {
-                    self?.dismissPopover()
+                    if self?.isHeadlessPolishActive == true {
+                        self?.cancelHeadlessPolish()
+                    } else if SelectionOverlayController.shared.isErrorHUDVisible {
+                        SelectionOverlayController.shared.hideErrorHUD()
+                    } else if self?.panel.isVisible == true {
+                        self?.dismissPopover()
+                    }
                 }
             } else if flags.contains(.option) && (event.keyCode == 36 || event.keyCode == 76) && (self?.panel.isVisible == true) { // Option + Return to polish
                 DispatchQueue.main.async {
@@ -454,11 +465,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 3. Local Monitor for events when Glossa is foregrounded
         localKeyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            guard let self = self, self.panel.isVisible else { return event }
+            guard let self = self else { return event }
             if event.keyCode == 53 { // Esc key
-                self.dismissPopover()
-                return nil
+                if self.isHeadlessPolishActive {
+                    self.cancelHeadlessPolish()
+                    return nil
+                }
+                if SelectionOverlayController.shared.isErrorHUDVisible {
+                    SelectionOverlayController.shared.hideErrorHUD()
+                    return nil
+                }
+                if self.panel.isVisible {
+                    self.dismissPopover()
+                    return nil
+                }
             }
+            guard self.panel.isVisible else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if flags == [.option, .shift] && event.keyCode == 15 { // Option + Shift + R
                 self.triggerInstantAction(mode: .rewrite)
@@ -473,7 +495,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 4. Global Mouse Down Monitor to dismiss when clicking outside
         globalMouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self = self, self.panel.isVisible else { return }
+            guard let self = self else { return }
+            if SelectionOverlayController.shared.isErrorHUDVisible {
+                DispatchQueue.main.async {
+                    SelectionOverlayController.shared.hideErrorHUD()
+                }
+            }
+            guard self.panel.isVisible else { return }
             let clickLocation = NSEvent.mouseLocation
             if !self.panel.frame.contains(clickLocation) {
                 DispatchQueue.main.async {
@@ -484,7 +512,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 5. Global Scroll Monitor to dismiss on page / window scroll
         globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] _ in
-            guard let self = self, self.panel.isVisible else { return }
+            guard let self = self else { return }
+            if SelectionOverlayController.shared.isErrorHUDVisible {
+                DispatchQueue.main.async {
+                    SelectionOverlayController.shared.hideErrorHUD()
+                }
+            }
+            guard self.panel.isVisible else { return }
             DispatchQueue.main.async {
                 self.dismissPopover()
             }
@@ -604,6 +638,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func triggerInstantAction(mode: ActionTriggerMode = .translate) {
+        if isHeadlessPolishActive {
+            cancelHeadlessPolish()
+            return
+        }
+
         if panel.isVisible {
             dismissPopover()
             return
@@ -623,6 +662,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.resetToEmptyState()
         viewModel.isAccessibilityTrusted = isTrusted
         viewModel.activeTriggerMode = mode
+
+        // Check for Headless In-Place Polish Mode
+        let autoReplaceOnPolish = UserDefaults.standard.bool(forKey: "autoReplaceOnPolish")
+        if mode == .rewrite && autoReplaceOnPolish {
+            if let text = captureResult.text, !text.isEmpty {
+                startHeadlessPolish(text: text, bounds: captureResult.bounds, targetElement: captureResult.focusedElement)
+                return
+            }
+        }
 
         if let text = captureResult.text, !text.isEmpty {
             // Selected text found
@@ -647,6 +695,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    private func startHeadlessPolish(text: String, bounds: NSRect, targetElement: AXUIElement?) {
+        dismissPopover()
+        cancelHeadlessPolish()
+
+        isHeadlessPolishActive = true
+        headlessTargetBounds = bounds
+        headlessTargetElement = targetElement
+
+        SelectionOverlayController.shared.showOverlay(at: bounds)
+
+        viewModel.inputText = text
+        viewModel.activeTriggerMode = .rewrite
+
+        viewModel.onPolishFinished = { [weak self] polishedText in
+            guard let self = self, self.isHeadlessPolishActive else { return }
+            self.isHeadlessPolishActive = false
+            SelectionOverlayController.shared.hideOverlay()
+
+            let targetElem = self.headlessTargetElement
+            let targetBounds = self.headlessTargetBounds ?? bounds
+            self.headlessTargetElement = nil
+            self.headlessTargetBounds = nil
+
+            let replaced = InPlaceTextReplacer.replaceSelectedText(
+                with: polishedText,
+                targetElement: targetElem
+            )
+            if !replaced {
+                SelectionOverlayController.shared.showErrorHUD(
+                    message: "Target field is read-only or could not be replaced.",
+                    near: targetBounds
+                )
+            }
+        }
+
+        viewModel.onPolishFailed = { [weak self] errorMsg in
+            guard let self = self, self.isHeadlessPolishActive else { return }
+            self.isHeadlessPolishActive = false
+            SelectionOverlayController.shared.hideOverlay()
+
+            let targetBounds = self.headlessTargetBounds ?? bounds
+            self.headlessTargetElement = nil
+            self.headlessTargetBounds = nil
+
+            SelectionOverlayController.shared.showErrorHUD(
+                message: errorMsg,
+                near: targetBounds
+            )
+        }
+
+        viewModel.runProfessionalPolishAndCopy()
+    }
+
+    func cancelHeadlessPolish() {
+        guard isHeadlessPolishActive else { return }
+        isHeadlessPolishActive = false
+        viewModel.cancelPolishTask()
+        SelectionOverlayController.shared.hideOverlay()
+        headlessTargetElement = nil
+        headlessTargetBounds = nil
     }
 
     /// Positions the popover panel above or below the selection bounds clamped to the current screen
@@ -688,7 +798,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Captures selected text and converts its AX screen bounds to AppKit desktop coordinates
-    private func captureSelectedTextAndBounds() -> (text: String?, bounds: NSRect) {
+    private func captureSelectedTextAndBounds() -> (text: String?, bounds: NSRect, focusedElement: AXUIElement?) {
         let mouseLocation = NSEvent.mouseLocation
         let fallbackRect = NSRect(x: mouseLocation.x - 10, y: mouseLocation.y - 10, width: 20, height: 20)
 
@@ -809,6 +919,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         let parentElem = parent as! AXUIElement
                         if let parentText = extractText(from: parentElem) {
                             selectedText = parentText
+                            focusedElement = parentElem
                             break
                         }
                         currentElem = parentElem
@@ -826,7 +937,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        return (selectedText, calculatedBounds ?? fallbackRect)
+        return (selectedText, calculatedBounds ?? fallbackRect, focusedElement)
     }
 
     /// Universal fallback: simulates Cmd+C to capture highlighted text when Accessibility APIs do not expose selection.
@@ -929,6 +1040,10 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
     private var polishIsEventStream: Bool = false
     private var polishReceivedDone: Bool = false
     private var polishToastWorkItem: DispatchWorkItem?
+
+    // Polish completion callbacks for Headless In-Place Replacement
+    var onPolishFinished: ((String) -> Void)?
+    var onPolishFailed: ((String) -> Void)?
 
     override init() {
         super.init()
@@ -1226,12 +1341,22 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
         let key: String
         do {
             guard let retrieved = try KeychainHelper.shared.getKey(account: provider.keychainAccount), !retrieved.isEmpty else {
-                self.polishErrorMessage = "\(provider.displayName) API Key not configured. Please open Settings (⌘,) to configure."
+                let msg = "\(provider.displayName) API Key not configured. Please open Settings (⌘,) to configure."
+                self.polishErrorMessage = msg
+                let failed = self.onPolishFailed
+                DispatchQueue.main.async {
+                    failed?(msg)
+                }
                 return
             }
             key = retrieved
         } catch {
-            self.polishErrorMessage = "Keychain error accessing \(provider.displayName) API Key: \(error.localizedDescription)"
+            let msg = "Keychain error accessing \(provider.displayName) API Key: \(error.localizedDescription)"
+            self.polishErrorMessage = msg
+            let failed = self.onPolishFailed
+            DispatchQueue.main.async {
+                failed?(msg)
+            }
             return
         }
 
@@ -1609,7 +1734,12 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
                 } else {
                     self.polishErrorMessage = "\(name) API error: \(msg)"
                 }
+                let err = self.polishErrorMessage
+                let failed = self.onPolishFailed
                 self.cancelPolishTask()
+                DispatchQueue.main.async {
+                    failed?(err)
+                }
                 return
             }
 
@@ -1730,6 +1860,11 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
             if let error = error as NSError? {
                 if error.code == NSURLErrorCancelled { return }
                 self.polishErrorMessage = error.localizedDescription
+                let msg = self.polishErrorMessage
+                let failed = self.onPolishFailed
+                DispatchQueue.main.async {
+                    failed?(msg)
+                }
                 return
             }
 
@@ -1738,6 +1873,11 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
                     self.polishErrorMessage = detailedMsg
                 }
                 polishErrorBuffer.removeAll()
+                let msg = self.polishErrorMessage
+                let failed = self.onPolishFailed
+                DispatchQueue.main.async {
+                    failed?(msg)
+                }
                 return
             }
 
@@ -1751,9 +1891,25 @@ class PopoverViewModel: NSObject, ObservableObject, URLSessionDataDelegate {
             if (200...299).contains(polishStatusCode) && polishErrorMessage.isEmpty {
                 if polishedOutputText.isEmpty {
                     self.polishErrorMessage = "Stream completed with empty output."
+                    let msg = self.polishErrorMessage
+                    let failed = self.onPolishFailed
+                    DispatchQueue.main.async {
+                        failed?(msg)
+                    }
                 } else {
                     self.polishedOutputText = sanitizePolishedText(self.polishedOutputText)
-                    autoCopyPolishedText(self.polishedOutputText)
+                    let text = self.polishedOutputText
+                    autoCopyPolishedText(text)
+                    let finished = self.onPolishFinished
+                    DispatchQueue.main.async {
+                        finished?(text)
+                    }
+                }
+            } else if !polishErrorMessage.isEmpty {
+                let msg = self.polishErrorMessage
+                let failed = self.onPolishFailed
+                DispatchQueue.main.async {
+                    failed?(msg)
                 }
             }
         }

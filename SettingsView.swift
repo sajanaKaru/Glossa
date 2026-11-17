@@ -30,6 +30,8 @@ public struct SettingsView: View {
     @State private var isLegacyVaultAvailable: Bool = false
     @State private var isPerformingProgrammaticClear: Bool = false
     @ObservedObject private var launchHelper = LaunchAtLoginHelper.shared
+    @AppStorage("autoReplaceOnPolish") private var autoReplaceOnPolish: Bool = false
+    @State private var isAccessibilityTrusted: Bool = AXIsProcessTrusted()
 
     public init(isPresented: Binding<Bool>, onKeySaved: (() -> Void)? = nil) {
         self._isPresented = isPresented
@@ -275,6 +277,59 @@ public struct SettingsView: View {
 
             Divider()
 
+            // English Polish Behavior Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("English Polish Behavior")
+                    .font(.system(size: 13, weight: .semibold))
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Auto-replace selected text on Polish")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Directly replaces selection in target app without popover")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $autoReplaceOnPolish)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .onChange(of: autoReplaceOnPolish) { _, enabled in
+                            refreshAccessibilityStatus()
+                            if enabled && !isAccessibilityTrusted {
+                                promptForAccessibilityPermission()
+                            }
+                        }
+                }
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isAccessibilityTrusted ? Color.green : Color.orange)
+                        .frame(width: 7, height: 7)
+                    Text(isAccessibilityTrusted ? "Accessibility Permission Active" : "Accessibility Permission Required")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(isAccessibilityTrusted ? .secondary : .orange)
+
+                    if !isAccessibilityTrusted {
+                        Spacer()
+                        Button("Open Privacy Settings...") {
+                            openAccessibilityPreferences()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(.accentColor)
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(4)
+            }
+
+            Divider()
+
             // Startup & Behavior Section
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -385,7 +440,10 @@ public struct SettingsView: View {
         }
         .padding(18)
         .frame(width: 420)
-        .onAppear(perform: loadCurrentKey)
+        .onAppear {
+            loadCurrentKey()
+            refreshAccessibilityStatus()
+        }
         .onChange(of: enteredKey) { _, newKey in
             handleInputChanged(newKey: newKey)
         }
@@ -676,6 +734,22 @@ public struct SettingsView: View {
         }
         currentTestTask = task
         task.resume()
+    }
+
+    private func refreshAccessibilityStatus() {
+        isAccessibilityTrusted = AXIsProcessTrusted()
+    }
+
+    private func promptForAccessibilityPermission() {
+        let promptOpts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(promptOpts)
+        refreshAccessibilityStatus()
+    }
+
+    private func openAccessibilityPreferences() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func saveKey() {

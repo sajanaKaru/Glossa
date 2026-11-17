@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-TAG="v1.1.0"
-TITLE="Glossa v1.1.0 — Native macOS Translation & Grammar Polisher"
+TAG="v1.2.0"
+TITLE="Glossa v1.2.0 — Native macOS Translation & In-Place Grammar Polisher"
 NOTES_FILE="RELEASE_NOTES.md"
 REPO="sajanaKaru/Glossa"
 

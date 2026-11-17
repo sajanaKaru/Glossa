@@ -5,11 +5,11 @@ struct AboutView: View {
     @Binding var isPresented: Bool
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2"
     }
 
     private var appBuild: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "2"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "3"
     }
 
     private var appIconImage: NSImage {
