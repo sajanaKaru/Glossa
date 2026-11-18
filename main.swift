@@ -667,8 +667,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let autoReplaceOnPolish = UserDefaults.standard.bool(forKey: "autoReplaceOnPolish")
         if mode == .rewrite && autoReplaceOnPolish {
             if let text = captureResult.text, !text.isEmpty {
-                startHeadlessPolish(text: text, bounds: captureResult.bounds, targetElement: captureResult.focusedElement)
-                return
+                let isEditable = InPlaceTextReplacer.isElementEditable(captureResult.focusedElement)
+                if isEditable {
+                    // Verified editable target: run headless in-place replacement
+                    startHeadlessPolish(text: text, bounds: captureResult.bounds, targetElement: captureResult.focusedElement)
+                    return
+                }
+                // Read-only target detected: smoothly fall through to standard popover dialog
             }
         }
 
@@ -720,13 +725,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.headlessTargetElement = nil
             self.headlessTargetBounds = nil
 
-            let replaced = InPlaceTextReplacer.replaceSelectedText(
+            let outcome = InPlaceTextReplacer.replaceSelectedText(
                 with: polishedText,
                 targetElement: targetElem
             )
-            if !replaced {
+            switch outcome {
+            case .success:
+                break
+            case .uneditableTarget:
                 SelectionOverlayController.shared.showErrorHUD(
-                    message: "Target field is read-only or could not be replaced.",
+                    message: "Selected text is read-only. Polished text copied to clipboard.",
+                    near: targetBounds
+                )
+            case .failed:
+                SelectionOverlayController.shared.showErrorHUD(
+                    message: "Could not replace text. Polished text copied to clipboard.",
                     near: targetBounds
                 )
             }

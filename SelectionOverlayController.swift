@@ -117,7 +117,7 @@ struct TransientErrorHUDView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(minWidth: 240, maxWidth: 360)
+        .frame(minWidth: 260, maxWidth: 420)
         .background(
             VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -194,7 +194,7 @@ final class SelectionOverlayController {
         hudPanel.contentView = NSHostingView(rootView: hudView)
 
         // Compute positioning anchored near the selection
-        let hudSize = NSSize(width: 320, height: 50)
+        let hudSize = NSSize(width: 390, height: 54)
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(targetRect) }) ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let margin: CGFloat = 8
