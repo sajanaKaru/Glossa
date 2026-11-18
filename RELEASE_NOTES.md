@@ -1,10 +1,18 @@
-# Glossa v1.2.0 — Native macOS Translation & In-Place Grammar Polisher
+# Glossa v1.2.1 — Native macOS Translation & In-Place Polish
 
-We are excited to announce the official release of **Glossa v1.2.0**, introducing seamless In-Place Text Replacement and a visual processing indicator for macOS.
+We are excited to announce **Glossa v1.2.1**, introducing strict positive-confirmation read-only surface detection and seamless dialog box fallback for macOS.
 
 ---
 
-### 🌟 What's New in v1.2.0
+### 🌟 What's New in v1.2.1
+
+- **Strict Read-Only Surface Detection**: Implemented a positive-confirmation editability engine (`InPlaceTextReplacer.isElementEditable`). Accessibility elements are strictly classified as editable only upon explicit attribute write permission or confirmed editable container ancestry.
+- **Seamless Popover Dialog Fallback**: When English Polish (`⌥⇧R` / `⌥Return`) is triggered on an uneditable surface (such as static web articles in Safari/Chrome, Preview PDF pages, or read-only documents) with auto-replace enabled, Glossa automatically falls back to opening the standard popover dialog at the selection bounds. The polished text streams visibly in the dialog and auto-copies to the clipboard with the confirmation toast ("✓ Copied to Clipboard!").
+- **Multi-App Editability Protection**: Explicit exclusion of non-editable bundles (`com.apple.Preview`, `QuickLook`) and non-editable roles (`AXStaticText`, `AXHeading`, `AXImage`, `AXWebArea`, `AXGroup`, `AXScrollArea`) prevents disruptive synthetic keystroke injections into static text.
+
+---
+
+### 🌟 Previous Release: v1.2.0
 
 - **Direct In-Place Auto-Replacement (`⌥⇧R`)**: When enabled, English Grammar Polish directly replaces the selected text in your active application (TextEdit, Notes, Safari, VSCode, Slack, etc.) without opening the Glossa popover window.
 - **Pulsing Selection Visual Indicator**: A glowing, non-activating floating highlight pulses over your selected text on screen while Glossa processes the rewrite, providing intuitive visual feedback without stealing keyboard or window focus.
